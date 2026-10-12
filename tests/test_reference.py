@@ -12,7 +12,7 @@ from reference.attention import (
 from reference.paged import PagedKVCache, paged_decode_attention, slots_for
 from reference.quant import dequantize, quantize
 
-HQ, HKV, D, PAGE = 12, 2, 128, 16
+HQ, HKV, D, PAGE = 16, 8, 128, 16
 
 
 @pytest.fixture(autouse=True)

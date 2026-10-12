@@ -12,15 +12,16 @@ Values marked *proposed* are defaults until the first GPU session confirms them.
 
 | Item | Value |
 | --- | --- |
-| GPU | *proposed:* one NVIDIA L4 24 GB (sm_89) or A100. All final numbers on one variant. |
-| Model | *proposed:* Qwen2.5-1.5B (28 layers, 12 query heads, 2 KV heads, GQA ratio 6, head dim 128). Pin the revision. |
+| GPU | *proposed:* one RTX 4090 on Vast.ai if a host passes the smoke test, otherwise one A10 on Lambda. All final numbers on one machine. |
+| Model | Qwen3-1.7B (28 layers, 16 query heads, 8 KV heads, GQA ratio 2, head dim 128). Pin the revision. Same KV head shape as Qwen3-8B and Llama-3-8B. |
 | Head dim | 128 |
-| Query / KV heads | 12 / 2 (from the model) |
+| Query / KV heads | 16 / 8 (from the model) |
 | Page size | 16 tokens |
 | Query tokens per request per layer | 1 (decode only) |
 | Q and output dtype | fp16 in, fp32 accumulation, fp16 out |
 | Cache formats | INT8 (primary), FP16 (control for the factorial comparison) |
 | Scales | Symmetric, one fp32 scale per (token, KV head), separate for K and V |
+| K smoothing | *proposed:* static per-(layer, KV head, channel) factor s, calibrated offline. Store K/s, multiply Q by s in the kernel. See ROADMAP.md, "Quantization finding". |
 | Rounding | Round half to even. Zero vectors get scale 1.0. Non-finite input is rejected. |
 | Sequence length | At least 1 (the new token's K/V is written before attention) |
 

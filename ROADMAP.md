@@ -16,6 +16,8 @@ Done:
 - [x] PyTorch reference: quantization, paged cache, direct and split decode, merge ([reference/](reference/))
 - [x] 26 reference tests passing on CPU: `uv run pytest`
 - [x] GPU smoke test scripts, not yet run on a GPU: `scripts/gpu_smoke_test.sh`
+- [x] Model recommended: Qwen3-1.7B (see Quantization finding)
+- [x] Real K/V capture and INT8 error measurement on CPU: `scripts/kv_quant_error.py`
 
 ## Decide this weekend
 
@@ -23,12 +25,60 @@ These block everything else. Proposed defaults are in `docs/scope.md`.
 
 | Decision | Recommendation | Why |
 | --- | --- | --- |
-| GPU access | A full-VM provider (GCP, AWS, Lambda) or a school cluster node. One L4 or A100. | Container-only rentals often block Nsight Compute counters. Profiling is required for the paper, so verify it first. |
-| Dev workflow | VS Code Remote SSH into the GPU box. Keep the repo on a persistent disk. Stop the instance after each session. | No CUDA on a Mac. Edit-compile-test must happen on the GPU host. |
-| Model | Qwen2.5-1.5B, pinned revision | Head dim 128, only 2 KV heads, GQA ratio 6. Few heads means Path A launches few blocks at small batch, which makes the split path interesting to study. |
+| GPU access | Try a Vast.ai RTX 4090 first. Keep the host only if `scripts/gpu_smoke_test.sh` passes, including Nsight counters. Fall back to a Lambda A10. | Vast.ai hosts are Docker containers, and counter access depends on each host's driver setting. Lambda is a full VM where `sudo ncu` works. See GPU budget. |
+| Dev workflow | VS Code Remote SSH into the GPU box. Write code on the Mac between sessions; only run the box to compile, test, and measure. | No CUDA on a Mac. Billing runs whenever the instance exists, even while you read or write. |
+| Model | Qwen3-1.7B, pinned revision | 8 KV heads and head dim 128, the same KV head shape as Qwen3-8B and Llama-3-8B, so kernel results transfer. Ungated. Harder to quantize than Qwen2.5-1.5B, which makes it the more honest test. |
 | External baseline | FlashInfer FP16 paged decode | Real paged decode kernel. Confirm it supports head dim 128 and page size 16 on your GPU in Phase 0. |
 | Scope check | Email the instructor the revised title and abstract | The plan changed from "INT8 in vLLM" to a kernel study. Get that accepted now, not in November. |
 | Weekly hours | Write down a real number | The schedule below assumes about 15 to 20 hours per week. |
+
+## GPU budget
+
+Estimate: **35 to 55 instance hours**, budget 60. The kernel study needs very
+little memory: one layer's cache for Qwen3-1.7B is 4 KiB per token, so batch 32
+at 16K context is 2 GiB. Any 24 GB card is plenty.
+
+| Phase | Hours |
+| --- | --- |
+| 0: smoke test, pins, FlashInfer | 3 to 5 |
+| 1: cache write, Path A, harness | 12 to 18 |
+| 2: Path B, merge, profiling, selector | 12 to 18 |
+| 3: final sweeps and reruns | 6 to 10 |
+| 4: clean reproduction check | 2 to 3 |
+
+Hours count instance time, not GPU busy time. Compiling and debugging take
+most of it; the full sweep itself takes minutes.
+
+| Option | Price checked Oct 11, 2026 | 60 hours | Notes |
+| --- | --- | --- | --- |
+| Vast.ai RTX 4090 | about $0.15 to $0.45/hr, set by each host | $10 to $27 | Containers. Nsight counters work only on some hosts. Host can vanish, so run the final sweep on one host in one sitting. 72 MB L2: benchmark working sets must be larger. |
+| Lambda A10 24 GB | $1.29/hr | about $77 | Full VM, `sudo ncu` works. Cannot stop an instance, only terminate, which erases local disk. Attach a persistent filesystem at launch and script the setup. |
+
+Either is far below the $200 to $300 in the original plan, which included vLLM
+integration. Keep a log in `results/gpu_hours.md`.
+
+## Quantization finding
+
+Measured on CPU on October 11 with `scripts/kv_quant_error.py`: one 2,048-token
+text (the project plan), calibration on the first half, error measured at 16
+decode positions in the second half. Metric is relative L2 error of the
+attention output, INT8 cache vs bf16 cache.
+
+| Model | Per-token INT8, mean / worst | With static K smoothing, mean / worst |
+| --- | --- | --- |
+| Qwen2.5-1.5B | 2.7% / 40% | 1.5% / 10% |
+| Qwen3-1.7B | 6.1% / 33% | 1.8% / 8% |
+
+- V quantizes well (about 1% error). Almost all the error comes from K.
+- K has outlier channels: the largest channel is up to 66x the median in early
+  layers. Per-token scales are set by the outlier, so other channels lose precision.
+- Static K smoothing fixes most of it: store K/s and multiply Q by s, where s is
+  a fixed per-(layer, KV head, channel) factor from calibration. q·k is unchanged.
+  Cost in the kernel: one extra multiply on Q per decode step and on K at cache
+  write. Per-token scales and append behavior stay the same.
+- This is QServe's SmoothAttention idea (Lin et al., 2024), applied after RoPE.
+  Cite it; it is not a novel contribution.
+- One text and one calibration split is a weak sample. Phase 0 reruns it on more text.
 
 ## Phases and gates
 
@@ -37,8 +87,7 @@ These block everything else. Proposed defaults are in `docs/scope.md`.
 - [ ] Start the GPU instance. Run `scripts/gpu_smoke_test.sh`. It must print `SMOKE TEST PASSED`.
 - [ ] Pin working versions (driver, CUDA, PyTorch, FlashInfer) in `configs/env.md`. Commit the manifest from `results/env/`.
 - [ ] Run `uv run pytest` on the GPU box too.
-- [ ] Capture model K/V: run Qwen2.5-1.5B with `use_cache=True` in Hugging Face Transformers on a few real prompts (short and ~8K tokens). `past_key_values` holds K after RoPE and V, which is exactly the cache-write boundary. Save a few layers as `.pt` files outside git (`captures/`).
-- [ ] Run the quantization error test on captured tensors. Look for outlier channels in K. If error is large, fix the scheme now (see Risks).
+- [ ] Rerun `scripts/kv_quant_error.py` on 3 to 4 different long texts (8K tokens) with a calibration text separate from the evaluation text. Decide whether K smoothing goes into the class scope (see Quantization finding).
 - [ ] Install FlashInfer and time one FP16 paged decode call with the scope shapes.
 - [ ] Send the scope email.
 
@@ -92,7 +141,7 @@ Submission fixes only. No new implementation.
 | Risk | Early signal | Response |
 | --- | --- | --- |
 | GPU or profiler access fails | Smoke test fails in Phase 0 | Switch provider immediately. Do not write kernels on a box you cannot profile. |
-| K has outlier channels and per-token INT8 error is large | Captured-tensor error much worse than the synthetic test | Report it. Try per-channel K scales only if time allows; otherwise narrow claims. |
+| K outlier channels make per-token INT8 lossy | Already observed (see Quantization finding) | Static K smoothing. If it does not hold on held-out text, report per-token error honestly and narrow claims. |
 | INT8 is slower than FP16 | Phase 1 numbers | Valid result. Profile to explain (dequant cost, scale loads, too little parallelism). |
 | Kernel debugging eats Phase 1 | Not correct by Thu Oct 16 | Simplify: fixed shapes as template constants, no vectorized loads yet. |
 | GPU budget | Usage log | Keep a log in `results/gpu_hours.md`. Compile and debug on small cases. |

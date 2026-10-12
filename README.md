@@ -13,6 +13,12 @@ uv sync
 uv run pytest            # reference tests, CPU only
 ```
 
+To measure INT8 error on real model K/V (CPU, downloads the model):
+
+```sh
+uv run --group capture python scripts/kv_quant_error.py --model Qwen/Qwen3-1.7B --text some_long_text.txt
+```
+
 On a GPU host, run `scripts/gpu_smoke_test.sh` first. It records the
 environment, compiles a tiny CUDA extension, and checks Nsight Compute access.
 
