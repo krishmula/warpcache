@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>warpcache learning roadmap, visual companion</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface: #fcfcfb; --surface-2: #f1f0ec; --line: #dddcd6;
+    --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #8a8985;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+    --s1-soft: #cde2fb; --s2-soft: #fbd9cc; --s3-soft: #c9efe0;
+    --gray: #b9b8b2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface: #1a1a19; --surface-2: #242423; --line: #3a3a38;
+      --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8a8985;
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+      --s1-soft: #1c3a63; --s2-soft: #5a2a16; --s3-soft: #14432f;
+      --gray: #5b5a56;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink);
+    font: 15px/1.5 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 44px 0 6px; }
+  p { margin: 6px 0 12px; color: var(--ink-2); max-width: 72ch; }
+  p.lead { color: var(--ink); }
+  figure { margin: 12px 0 0; }
+  figcaption { font-size: 13px; color: var(--ink-3); margin-top: 6px; max-width: 80ch; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font: 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink-2); }
+  svg text.strong { fill: var(--ink); font-weight: 600; }
+  svg text.small { font-size: 11px; fill: var(--ink-3); }
+  svg text.mono { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  .grid { stroke: var(--line); stroke-width: 1; }
+  .axis { stroke: var(--line); stroke-width: 1; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
+  .tile { background: var(--surface-2); border-radius: 8px; padding: 14px 16px; }
+  .tile .label { font-size: 12px; color: var(--ink-3); }
+  .tile .value { font-size: 30px; font-weight: 600; letter-spacing: -0.5px; }
+  .tile .sub { font-size: 12px; color: var(--ink-2); }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: var(--ink-2); margin: 6px 0 0; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .legend .l1::before { background: var(--s1); } .legend .l2::before { background: var(--s2); } .legend .l3::before { background: var(--s3); }
+  .legend .lg::before { background: var(--gray); }
+  table { border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td { text-align: left; padding: 5px 12px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--ink-3); font-weight: 500; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
+  .bar:hover, .seg:hover, .blk:hover { opacity: 0.8; }
+</style>
+</head>
+<body>
+<main>
+<h1>warpcache learning roadmap</h1>
+<p class="lead">Visual companion to <code>docs/learning-roadmap.md</code>. Written October 17, 2026. Class completion November 5.</p>
+
+<h2>1. The replanned schedule</h2>
+<p>Each bar is a phase. The diamonds are gates. Every gate has a fallback that still produces a complete submission.</p>
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Timeline of five phases and four gates from October 17 to November 9">
+  <!-- day scale: Oct 17 = day 0 at x=150, Nov 9 = day 23, 33px per day -->
+  <g class="small">
+    <!-- week markers -->
+    <line class="grid" x1="190" y1="40" x2="190" y2="250"/>
+    <line class="grid" x1="414" y1="40" x2="414" y2="250"/>
+    <line class="grid" x1="638" y1="40" x2="638" y2="250"/>
+    <line class="grid" x1="862" y1="40" x2="862" y2="250"/>
+    <text x="190" y="32">Sat Oct 17</text>
+    <text x="414" y="32">Sat Oct 24</text>
+    <text x="638" y="32">Sat Oct 31</text>
+    <text x="862" y="32">Sat Nov 7</text>
+  </g>
+  <!-- phase rows -->
+  <g>
+    <text class="strong" x="0" y="66">Phase 0</text><text class="small" x="0" y="80">GPU box, CUDA basics</text>
+    <rect class="bar" x="190" y="54" width="96" height="18" rx="4" fill="var(--s1)"><title>Phase 0: Sat Oct 17 to Mon Oct 19, 12 hours</title></rect>
+
+    <text class="strong" x="0" y="106">Phase 1</text><text class="small" x="0" y="120">cache_write, Path A, harness</text>
+    <rect class="bar" x="286" y="94" width="192" height="18" rx="4" fill="var(--s1)"><title>Phase 1: Tue Oct 20 to Sun Oct 25, 24 hours</title></rect>
+
+    <text class="strong" x="0" y="146">Phase 2</text><text class="small" x="0" y="160">Path B, merge, profile</text>
+    <rect class="bar" x="478" y="134" width="192" height="18" rx="4" fill="var(--s1)"><title>Phase 2: Mon Oct 26 to Sat Oct 31, 20 hours</title></rect>
+
+    <text class="strong" x="0" y="186">Phase 3</text><text class="small" x="0" y="200">freeze, sweep, figures, draft</text>
+    <rect class="bar" x="670" y="174" width="96" height="18" rx="4" fill="var(--s1)"><title>Phase 3: Sun Nov 1 to Tue Nov 3, 11 hours</title></rect>
+
+    <text class="strong" x="0" y="226">Phase 4</text><text class="small" x="0" y="240">reproduce, demo, final pass</text>
+    <rect class="bar" x="766" y="214" width="64" height="18" rx="4" fill="var(--s1)"><title>Phase 4: Wed Nov 4 to Thu Nov 5, 5 hours</title></rect>
+    <rect class="bar" x="830" y="214" width="128" height="18" rx="4" fill="var(--gray)"><title>Buffer: Fri Nov 6 to Mon Nov 9, submission fixes only</title></rect>
+    <text class="small" x="836" y="227" style="fill:var(--ink)">buffer</text>
+  </g>
+  <!-- gates -->
+  <g>
+    <line class="axis" x1="190" y1="262" x2="958" y2="262"/>
+    <polygon points="286,255 293,262 286,269 279,262" fill="var(--s2)"><title>Gate 0, Mon Oct 19: smoke test passes on the final GPU</title></polygon>
+    <text class="small" x="286" y="284" text-anchor="middle">Gate 0 · Oct 19</text>
+    <polygon points="478,255 485,262 478,269 471,262" fill="var(--s2)"><title>Gate 1, Sun Oct 25: Path A INT8 and FP16 pass every test</title></polygon>
+    <text class="small" x="478" y="284" text-anchor="middle">Gate 1 · Oct 25</text>
+    <polygon points="670,255 677,262 670,269 663,262" fill="var(--s2)"><title>Gate 2, Sat Oct 31: Path B matches Path A, no NaNs</title></polygon>
+    <text class="small" x="670" y="284" text-anchor="middle">Gate 2 · Oct 31</text>
+    <polygon points="766,255 773,262 766,269 759,262" fill="var(--s2)"><title>Gate 3, Tue Nov 3: sweep done, every figure, draft complete</title></polygon>
+    <text class="small" x="766" y="284" text-anchor="middle">Gate 3 · Nov 3</text>
+    <polygon points="830,255 837,262 830,269 823,262" fill="var(--ink)"><title>Class completion, Thu Nov 5</title></polygon>
+    <text class="small" x="830" y="298" text-anchor="middle">class done</text>
+    <polygon points="958,255 965,262 958,269 951,262" fill="var(--ink)"><title>Submission, Mon Nov 9</title></polygon>
+    <text class="small" x="958" y="284" text-anchor="end">submit</text>
+  </g>
+</svg>
+<figcaption>Gate 1 moved from October 18 to October 25 because Phase 0 has not run on a GPU yet. Hover a bar or diamond for its pass condition.</figcaption>
+</figure>
+
+<h2>2. Where the hours go</h2>
+<p>About 70 hours over three weeks. Learning is front-loaded. Building is most of Phases 1 and 2.</p>
+<figure>
+<svg viewBox="0 0 960 230" role="img" aria-label="Stacked bars of learn and build hours per phase">
+  <g class="small">
+    <line class="grid" x1="90" y1="180" x2="940" y2="180"/>
+    <line class="grid" x1="90" y1="120" x2="940" y2="120"/>
+    <line class="grid" x1="90" y1="60" x2="940" y2="60"/>
+    <text x="80" y="184" text-anchor="end">0 h</text>
+    <text x="80" y="124" text-anchor="end">10 h</text>
+    <text x="80" y="64" text-anchor="end">20 h</text>
+  </g>
+  <!-- 6 px per hour, baseline y=180. Order: build (bottom, s1), learn (top, s2), 2px gap -->
+  <g>
+    <!-- Phase 0: build 4, learn 8 -->
+    <rect class="seg" x="120" y="156" width="110" height="24" rx="0" fill="var(--s1)"><title>Phase 0 build: 4 h</title></rect>
+    <rect class="seg" x="120" y="106" width="110" height="48" rx="4" fill="var(--s2)"><title>Phase 0 learn: 8 h</title></rect>
+    <text x="175" y="200" text-anchor="middle" class="strong">Phase 0</text>
+    <text x="175" y="98" text-anchor="middle" class="small">12 h</text>
+    <!-- Phase 1: build 18, learn 6 -->
+    <rect class="seg" x="290" y="72" width="110" height="108" fill="var(--s1)"><title>Phase 1 build: 18 h</title></rect>
+    <rect class="seg" x="290" y="34" width="110" height="36" rx="4" fill="var(--s2)"><title>Phase 1 learn: 6 h</title></rect>
+    <text x="345" y="200" text-anchor="middle" class="strong">Phase 1</text>
+    <text x="345" y="26" text-anchor="middle" class="small">24 h</text>
+    <!-- Phase 2: build 16, learn 4 -->
+    <rect class="seg" x="460" y="84" width="110" height="96" fill="var(--s1)"><title>Phase 2 build: 16 h</title></rect>
+    <rect class="seg" x="460" y="58" width="110" height="24" rx="4" fill="var(--s2)"><title>Phase 2 learn: 4 h</title></rect>
+    <text x="515" y="200" text-anchor="middle" class="strong">Phase 2</text>
+    <text x="515" y="50" text-anchor="middle" class="small">20 h</text>
+    <!-- Phase 3: build 10, learn 1 -->
+    <rect class="seg" x="630" y="120" width="110" height="60" fill="var(--s1)"><title>Phase 3 build: 10 h</title></rect>
+    <rect class="seg" x="630" y="112" width="110" height="6" rx="2" fill="var(--s2)"><title>Phase 3 learn: 1 h</title></rect>
+    <text x="685" y="200" text-anchor="middle" class="strong">Phase 3</text>
+    <text x="685" y="104" text-anchor="middle" class="small">11 h</text>
+    <!-- Phase 4: build 5 -->
+    <rect class="seg" x="800" y="150" width="110" height="30" rx="4" fill="var(--s1)"><title>Phase 4 build: 5 h</title></rect>
+    <text x="855" y="200" text-anchor="middle" class="strong">Phase 4</text>
+    <text x="855" y="142" text-anchor="middle" class="small">5 h</text>
+  </g>
+</svg>
+<div class="legend"><span class="l1">build</span><span class="l2">learn</span></div>
+<figcaption>GPU instance time is about 40 of the 70 hours. Write code on the Mac with the box off.</figcaption>
+</figure>
+
+<h2>3. The one idea: decode attention is memory bound</h2>
+<p>One layer of Qwen3-1.7B history at 16K context, batch 1, on an RTX 4090. The whole project follows from these three numbers.</p>
+<div class="tiles">
+  <div class="tile"><div class="label">Bytes to read (FP16 K and V)</div><div class="value">64 MiB</div><div class="sub">16,384 tokens × 8 KV heads × 128 dims × 2 bytes × 2 tensors</div></div>
+  <div class="tile"><div class="label">Time to move them at 1,008 GB/s</div><div class="value">≈ 64 µs</div><div class="sub">INT8 halves this, if dequantization is free</div></div>
+  <div class="tile"><div class="label">Time for the math at 80 TFLOP/s</div><div class="value">≈ 2 µs</div><div class="sub">134 MFLOP: 16 heads × 16,384 × 128 × 2 × 2</div></div>
+</div>
+<figcaption>The kernel is memory bound by about 30×. Compute will never be the limit. The questions are "how many bytes" and "are enough blocks reading at once".</figcaption>
+
+<h2>4. GPU execution model (concept C1)</h2>
+<p>A kernel launch is a grid of blocks. Each block is a set of threads that run on one streaming multiprocessor (SM) and share fast memory. Threads execute in warps of 32 lanes that run the same instruction together.</p>
+<figure>
+<svg viewBox="0 0 960 300" role="img" aria-label="Grid of blocks, one block of four warps, one warp of 32 lanes">
+  <!-- grid -->
+  <text class="strong" x="20" y="30">Grid (one kernel launch)</text>
+  <text class="small" x="20" y="46">Path A: B × Hq blocks. Batch 1 gives 16 blocks.</text>
+  <g fill="var(--s1-soft)" stroke="var(--s1)" stroke-width="1">
+    <rect x="20" y="60" width="44" height="34" rx="3"/><rect x="70" y="60" width="44" height="34" rx="3"/><rect x="120" y="60" width="44" height="34" rx="3"/><rect x="170" y="60" width="44" height="34" rx="3"/>
+    <rect x="20" y="100" width="44" height="34" rx="3"/><rect x="70" y="100" width="44" height="34" rx="3"/><rect x="120" y="100" width="44" height="34" rx="3"/><rect x="170" y="100" width="44" height="34" rx="3"/>
+    <rect x="20" y="140" width="44" height="34" rx="3"/><rect x="70" y="140" width="44" height="34" rx="3"/><rect x="120" y="140" width="44" height="34" rx="3"/><rect x="170" y="140" width="44" height="34" rx="3"/>
+    <rect x="20" y="180" width="44" height="34" rx="3"/><rect x="70" y="180" width="44" height="34" rx="3" fill="var(--s1)"/><rect x="120" y="180" width="44" height="34" rx="3"/><rect x="170" y="180" width="44" height="34" rx="3"/>
+  </g>
+  <text class="small" x="20" y="240">block = (request b, query head h)</text>
+  <text class="small" x="20" y="256">Each block lands on one SM.</text>
+  <text class="small" x="20" y="272">The 4090 has 128 SMs.</text>
+  <!-- arrow -->
+  <path d="M 222 197 L 300 150" stroke="var(--ink-3)" stroke-width="1" fill="none"/>
+  <!-- block -->
+  <text class="strong" x="300" y="30">Block (128 threads = 4 warps)</text>
+  <text class="small" x="300" y="46">Shares 48 KB of shared memory.</text>
+  <g>
+    <rect x="300" y="60" width="240" height="160" rx="6" fill="none" stroke="var(--s1)" stroke-width="1.5"/>
+    <rect x="312" y="72" width="216" height="30" rx="3" fill="var(--s1-soft)"/><text x="320" y="91">warp 0 · tokens 0, 4, 8, …</text>
+    <rect x="312" y="108" width="216" height="30" rx="3" fill="var(--s1)"/><text x="320" y="127" style="fill:#fff">warp 1 · tokens 1, 5, 9, …</text>
+    <rect x="312" y="144" width="216" height="30" rx="3" fill="var(--s1-soft)"/><text x="320" y="163">warp 2 · tokens 2, 6, 10, …</text>
+    <rect x="312" y="180" width="216" height="30" rx="3" fill="var(--s1-soft)"/><text x="320" y="199">warp 3 · tokens 3, 7, 11, …</text>
+  </g>
+  <text class="small" x="300" y="240">Each warp keeps its own (m, l, u).</text>
+  <text class="small" x="300" y="256">At the end, shared memory merges the four.</text>
+  <path d="M 540 123 L 600 123" stroke="var(--ink-3)" stroke-width="1" fill="none"/>
+  <!-- warp -->
+  <text class="strong" x="600" y="30">Warp (32 lanes, one instruction)</text>
+  <text class="small" x="600" y="46">Lane i holds dims 4i … 4i+3 of q, K, V, and u.</text>
+  <g fill="var(--s1-soft)" stroke="var(--s1)" stroke-width="1">
+    <rect x="600" y="60" width="18" height="18" rx="2"/><rect x="621" y="60" width="18" height="18" rx="2"/><rect x="642" y="60" width="18" height="18" rx="2"/><rect x="663" y="60" width="18" height="18" rx="2"/><rect x="684" y="60" width="18" height="18" rx="2"/><rect x="705" y="60" width="18" height="18" rx="2"/><rect x="726" y="60" width="18" height="18" rx="2"/><rect x="747" y="60" width="18" height="18" rx="2"/>
+    <rect x="600" y="81" width="18" height="18" rx="2"/><rect x="621" y="81" width="18" height="18" rx="2"/><rect x="642" y="81" width="18" height="18" rx="2"/><rect x="663" y="81" width="18" height="18" rx="2"/><rect x="684" y="81" width="18" height="18" rx="2"/><rect x="705" y="81" width="18" height="18" rx="2"/><rect x="726" y="81" width="18" height="18" rx="2"/><rect x="747" y="81" width="18" height="18" rx="2"/>
+    <rect x="600" y="102" width="18" height="18" rx="2"/><rect x="621" y="102" width="18" height="18" rx="2"/><rect x="642" y="102" width="18" height="18" rx="2"/><rect x="663" y="102" width="18" height="18" rx="2"/><rect x="684" y="102" width="18" height="18" rx="2"/><rect x="705" y="102" width="18" height="18" rx="2"/><rect x="726" y="102" width="18" height="18" rx="2"/><rect x="747" y="102" width="18" height="18" rx="2"/>
+    <rect x="600" y="123" width="18" height="18" rx="2"/><rect x="621" y="123" width="18" height="18" rx="2"/><rect x="642" y="123" width="18" height="18" rx="2"/><rect x="663" y="123" width="18" height="18" rx="2"/><rect x="684" y="123" width="18" height="18" rx="2"/><rect x="705" y="123" width="18" height="18" rx="2"/><rect x="726" y="123" width="18" height="18" rx="2"/><rect x="747" y="123" width="18" height="18" rx="2"/>
+  </g>
+  <text class="small" x="600" y="165">32 lanes × 4 values = 128 = head dim.</text>
+  <text class="small" x="600" y="181">Lane loads 8 bytes of fp16 (or 4 bytes of int8).</text>
+  <text class="small" x="600" y="197">The warp loads 256 contiguous bytes: coalesced.</text>
+  <text class="small" x="600" y="221">Dot product: each lane multiplies its 4 values,</text>
+  <text class="small" x="600" y="237">then 5 rounds of __shfl_xor_sync sum across lanes.</text>
+  <text class="small" x="600" y="253">Every lane ends with the full score.</text>
+</svg>
+<figcaption>The highlighted block is (request 0, query head 13). Its KV head is 13 / 2 = 6 because Qwen3-1.7B has 16 query heads over 8 KV heads.</figcaption>
+</figure>
+
+<h2>5. Memory hierarchy with numbers (concept C2)</h2>
+<p>Approximate RTX 4090 figures. The kernel lives in the bottom row. Registers hold q and the running state. The block touches shared memory once, for the final merge.</p>
+<figure>
+<svg viewBox="0 0 960 250" role="img" aria-label="Memory hierarchy from registers to global memory with size and bandwidth">
+  <g>
+    <rect x="20" y="20" width="920" height="40" rx="6" fill="var(--s1)"/>
+    <text x="36" y="45" style="fill:#fff;font-weight:600">Registers</text>
+    <text x="250" y="45" style="fill:#fff">256 KB per SM · per thread · fastest</text>
+    <text x="620" y="45" style="fill:#fff">holds: q (4 floats per lane), m, l, u (4 floats per lane)</text>
+
+    <rect x="20" y="66" width="920" height="40" rx="6" fill="var(--s1)" opacity="0.8"/>
+    <text x="36" y="91" style="fill:#fff;font-weight:600">Shared memory / L1</text>
+    <text x="250" y="91" style="fill:#fff">128 KB per SM · per block · ~1 cycle latency</text>
+    <text x="620" y="91" style="fill:#fff">holds: four warps' (m, l, u) for the merge</text>
+
+    <rect x="20" y="112" width="920" height="40" rx="6" fill="var(--s1)" opacity="0.6"/>
+    <text x="36" y="137" style="fill:#fff;font-weight:600">L2 cache</text>
+    <text x="250" y="137" style="fill:#fff">72 MB · shared by all SMs</text>
+    <text x="620" y="137" style="fill:#fff">benchmark working set must exceed this, or numbers lie</text>
+
+    <rect x="20" y="158" width="920" height="40" rx="6" fill="var(--s1)" opacity="0.4"/>
+    <text x="36" y="183" class="strong">Global memory (GDDR6X)</text>
+    <text x="250" y="183">24 GB · 1,008 GB/s · ~600 ns latency</text>
+    <text x="620" y="183">holds: K cache, V cache, scales, block tables</text>
+  </g>
+  <text class="small" x="20" y="225">To hide the 600 ns latency the SM needs many warps with loads in flight. That is why Path A at batch 1 is slow: 16 blocks cannot keep 128 SMs busy.</text>
+</svg>
+<figcaption>Lambda A10 for comparison: 72 SMs, 600 GB/s, 6 MB L2. Everything else is the same shape.</figcaption>
+</figure>
+
+<h2>6. Paged cache layout (concept C6)</h2>
+<p>Tokens live in pages of 16. A request's block table lists its physical pages in order. The kernel never sees a contiguous history.</p>
+<figure>
+<svg viewBox="0 0 960 230" role="img" aria-label="Block table mapping logical tokens to physical pages">
+  <text class="strong" x="20" y="24">Request 1, seq_len = 37, block_table[1] = [9, 2, 5]</text>
+  <text class="small" x="20" y="44">logical token t</text>
+  <g>
+    <rect x="20" y="52" width="150" height="30" rx="4" fill="var(--s1-soft)"/><text x="30" y="71" class="mono">t = 0 … 15</text>
+    <rect x="175" y="52" width="150" height="30" rx="4" fill="var(--s2-soft)"/><text x="185" y="71" class="mono">t = 16 … 31</text>
+    <rect x="330" y="52" width="150" height="30" rx="4" fill="var(--s3-soft)"/><text x="340" y="71" class="mono">t = 32 … 36</text>
+    <rect x="480" y="52" width="60" height="30" rx="4" fill="none" stroke="var(--line)" stroke-dasharray="3 3"/><text x="488" y="71" class="small">unused</text>
+  </g>
+  <path d="M 95 82 L 95 118" stroke="var(--s1)" stroke-width="1.5" fill="none"/>
+  <path d="M 250 82 L 380 118" stroke="var(--s2)" stroke-width="1.5" fill="none"/>
+  <path d="M 405 82 L 665 118" stroke="var(--s3)" stroke-width="1.5" fill="none"/>
+  <text class="small" x="20" y="112">physical page p in K cache [P, 16, Hkv, D]</text>
+  <g>
+    <rect x="20" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="34" y="139" class="mono">p=0</text>
+    <rect x="85" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="99" y="139" class="mono">p=1</text>
+    <rect x="350" y="120" width="60" height="30" rx="4" fill="var(--s2-soft)"/><text x="364" y="139" class="mono">p=2</text>
+    <rect x="150" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="164" y="139" class="mono">p=3</text>
+    <rect x="215" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="229" y="139" class="mono">p=4</text>
+    <rect x="635" y="120" width="60" height="30" rx="4" fill="var(--s3-soft)"/><text x="649" y="139" class="mono">p=5</text>
+    <rect x="280" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="294" y="139" class="mono">p=6</text>
+    <rect x="415" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="429" y="139" class="mono">p=7</text>
+    <rect x="480" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="494" y="139" class="mono">p=8</text>
+    <rect x="65" y="160" width="60" height="30" rx="4" fill="var(--s1-soft)"/><text x="79" y="179" class="mono">p=9</text>
+    <rect x="545" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="559" y="139" class="mono">p=10</text>
+    <rect x="700" y="120" width="60" height="30" rx="4" fill="var(--surface-2)"/><text x="714" y="139" class="mono">p=11</text>
+  </g>
+  <text class="small" x="20" y="214">Token 37 would be page = block_table[37 / 16] = block_table[2] = 5, offset = 37 % 16 = 5. Slot for writes = 5 × 16 + 5 = 85.</text>
+</svg>
+<figcaption>Query head h reads KV head h / 2. Inside a page, one token's K for one KV head is 128 contiguous values: 256 bytes fp16 or 128 bytes int8 plus one fp32 scale.</figcaption>
+</figure>
+
+<h2>7. Path A vs Path B thread mapping</h2>
+<p>Path A gives one block the whole history. Path B gives each block a chunk, and a second kernel merges the chunks. The inner loop is identical. Write it once as a device function with a token range.</p>
+<figure>
+<svg viewBox="0 0 960 330" role="img" aria-label="Path A one block per request and head over the full history, Path B one block per chunk plus a merge kernel">
+  <!-- Path A -->
+  <text class="strong" x="20" y="24">Path A · direct · grid (B, Hq)</text>
+  <text class="small" x="20" y="42">batch 1, 16K context gives 16 blocks, each reads 4 MiB</text>
+  <rect x="20" y="52" width="420" height="26" rx="4" fill="var(--s1)"/>
+  <text x="30" y="69" style="fill:#fff">block (b=0, h=0) · tokens 0 … 16383 · one pass of online softmax</text>
+  <rect x="20" y="82" width="420" height="26" rx="4" fill="var(--s1)" opacity="0.7"/>
+  <text x="30" y="99" style="fill:#fff">block (b=0, h=1) · tokens 0 … 16383</text>
+  <text class="small" x="30" y="128">… 14 more blocks</text>
+  <rect x="20" y="140" width="420" height="26" rx="4" fill="none" stroke="var(--s1)"/>
+  <text x="30" y="157">output[b, h, :] written directly · no workspace</text>
+  <text class="small" x="20" y="186">Good when B × Hq ≥ 2 × SMs (batch 16 and up).</text>
+  <text class="small" x="20" y="202">Bad at small batch: 16 blocks on 128 SMs, 88% idle.</text>
+
+  <!-- Path B -->
+  <text class="strong" x="500" y="24">Path B · split · grid (B, Hq, S)</text>
+  <text class="small" x="500" y="42">batch 1, 16K, S = 16 gives 256 blocks, each reads 256 KiB</text>
+  <g>
+    <rect x="500" y="52" width="100" height="26" rx="4" fill="var(--s1)"/><text x="508" y="69" style="fill:#fff" class="mono">c=0 · 0…1023</text>
+    <rect x="604" y="52" width="100" height="26" rx="4" fill="var(--s1)"/><text x="612" y="69" style="fill:#fff" class="mono">c=1</text>
+    <rect x="708" y="52" width="100" height="26" rx="4" fill="var(--s1)"/><text x="716" y="69" style="fill:#fff" class="mono">c=2</text>
+    <rect x="812" y="52" width="100" height="26" rx="4" fill="var(--s1)"/><text x="820" y="69" style="fill:#fff" class="mono">c=3 …</text>
+  </g>
+  <g>
+    <path d="M 550 78 L 550 96" stroke="var(--ink-3)" fill="none"/><path d="M 654 78 L 654 96" stroke="var(--ink-3)" fill="none"/><path d="M 758 78 L 758 96" stroke="var(--ink-3)" fill="none"/><path d="M 862 78 L 862 96" stroke="var(--ink-3)" fill="none"/>
+  </g>
+  <rect x="500" y="98" width="412" height="26" rx="4" fill="var(--surface-2)"/>
+  <text x="508" y="115" class="mono">workspace: m[b,h,c] l[b,h,c] u[b,h,c,0:128] (fp32)</text>
+  <path d="M 706 124 L 706 142" stroke="var(--ink-3)" fill="none"/>
+  <rect x="500" y="144" width="412" height="26" rx="4" fill="var(--s3)"/>
+  <text x="508" y="161" style="fill:#fff">merge kernel · one block per (b, h) · thread d owns output dim d</text>
+  <text class="small" x="500" y="190">Good at small batch and long context: 256 blocks fill the chip.</text>
+  <text class="small" x="500" y="206">Cost: a second launch and S × 130 floats per head of workspace traffic.</text>
+  <text class="small" x="500" y="222">Empty chunk (chunk start ≥ seq_len): write m = −∞, l = 0, u = 0.</text>
+
+  <!-- merge formula -->
+  <rect x="20" y="236" width="892" height="78" rx="6" fill="var(--surface-2)"/>
+  <text class="strong" x="32" y="258">Merge of S partial states (same math as reference/attention.py merge_states)</text>
+  <text class="mono" x="32" y="280">m_all = max_c m_c      w_c = exp(m_c − m_all)      l_all = Σ_c w_c · l_c      u_all = Σ_c w_c · u_c      out = u_all / l_all</text>
+  <text class="small" x="32" y="302">The same formula merges the four warps inside a Path A block. Learn it once in piece 0.3, use it three times.</text>
+</svg>
+<figcaption>S is num_splits. The selector picks S from batch size, query heads, SM count, and max sequence length before launch.</figcaption>
+</figure>
+
+<h2>8. Why the selector exists: blocks vs SMs</h2>
+<p>Path A blocks for Qwen3-1.7B (16 query heads) at each batch size, against 128 SMs on the 4090. Below the line the blocks cannot fill the chip and Path B should win. This is the prediction the Phase 2 chunk sweep tests.</p>
+<figure>
+<svg viewBox="0 0 960 260" role="img" aria-label="Bar chart of Path A block count by batch size against the 128 SM line">
+  <!-- scale: 0.3 px per block, baseline y=210, max 512 blocks -> 154px -->
+  <g class="small">
+    <line class="grid" x1="90" y1="210" x2="920" y2="210"/>
+    <line class="grid" x1="90" y1="150" x2="920" y2="150"/>
+    <line class="grid" x1="90" y1="90" x2="920" y2="90"/>
+    <text x="80" y="214" text-anchor="end">0</text>
+    <text x="80" y="154" text-anchor="end">200</text>
+    <text x="80" y="94" text-anchor="end">400</text>
+    <text x="12" y="40">blocks</text>
+  </g>
+  <!-- reference lines -->
+  <line x1="90" y1="171.6" x2="920" y2="171.6" stroke="var(--s2)" stroke-width="1.5"/>
+  <text x="922" y="175" class="small" style="fill:var(--s2)">128 SMs</text>
+  <line x1="90" y1="133.2" x2="920" y2="133.2" stroke="var(--s2)" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="922" y="137" class="small" style="fill:var(--s2)">2 × SMs</text>
+  <!-- bars: batch 1=16, 2=32, 4=64, 8=128, 16=256, 32=512 -->
+  <g>
+    <rect class="blk" x="120" y="205.2" width="80" height="4.8" rx="2" fill="var(--s1)"><title>batch 1: 16 blocks</title></rect>
+    <text x="160" y="232" text-anchor="middle" class="strong">1</text><text x="160" y="200" text-anchor="middle" class="small">16</text>
+    <rect class="blk" x="250" y="200.4" width="80" height="9.6" rx="2" fill="var(--s1)"><title>batch 2: 32 blocks</title></rect>
+    <text x="290" y="232" text-anchor="middle" class="strong">2</text><text x="290" y="195" text-anchor="middle" class="small">32</text>
+    <rect class="blk" x="380" y="190.8" width="80" height="19.2" rx="3" fill="var(--s1)"><title>batch 4: 64 blocks</title></rect>
+    <text x="420" y="232" text-anchor="middle" class="strong">4</text><text x="420" y="186" text-anchor="middle" class="small">64</text>
+    <rect class="blk" x="510" y="171.6" width="80" height="38.4" rx="3" fill="var(--s1)"><title>batch 8: 128 blocks</title></rect>
+    <text x="550" y="232" text-anchor="middle" class="strong">8</text><text x="550" y="166" text-anchor="middle" class="small">128</text>
+    <rect class="blk" x="640" y="133.2" width="80" height="76.8" rx="4" fill="var(--s1)"><title>batch 16: 256 blocks</title></rect>
+    <text x="680" y="232" text-anchor="middle" class="strong">16</text><text x="680" y="128" text-anchor="middle" class="small">256</text>
+    <rect class="blk" x="770" y="56.4" width="80" height="153.6" rx="4" fill="var(--s1)"><title>batch 32: 512 blocks</title></rect>
+    <text x="810" y="232" text-anchor="middle" class="strong">32</text><text x="810" y="51" text-anchor="middle" class="small">512</text>
+  </g>
+  <text x="505" y="254" text-anchor="middle" class="small">batch size</text>
+</svg>
+<figcaption>Selector v1 rule: if B × Hq ≥ 2 × SMs pick Path A, else pick Path B with num_splits = ceil(2 × SMs / (B × Hq)), capped so each chunk holds at least 64 tokens. Tune the threshold on the tuning set only.</figcaption>
+</figure>
+
+<h2>9. What to learn before each piece</h2>
+<p>Read a row only when you reach its first piece. Reading ahead past one phase is the most common way to lose a day.</p>
+<figure>
+<svg viewBox="0 0 960 360" role="img" aria-label="Concepts mapped to the pieces that first need them">
+  <!-- columns: concepts left, pieces right -->
+  <text class="strong" x="20" y="22">Concept</text>
+  <text class="strong" x="560" y="22">First piece that needs it</text>
+  <g>
+    <!-- rows at y = 48 + 24*i -->
+    <text x="20" y="52">C1 execution model · C2 memory and coalescing</text>
+    <text x="20" y="76">C3 launching from PyTorch · C4 warp shuffles</text>
+    <text x="20" y="100">C5 online softmax and merge</text>
+    <text x="20" y="124">C6 paged indexing · C7 INT8 in CUDA</text>
+    <text x="20" y="148">C9 compute-sanitizer and printf</text>
+    <text x="20" y="172">C8 dtype templates</text>
+    <text x="20" y="196">C10 CUDA events and L2-safe timing</text>
+    <text x="20" y="220">C12 filling the chip, waves, tail</text>
+    <text x="20" y="244">C11 Nsight Compute, memory bound vs latency bound</text>
+    <text x="20" y="268">C13 vectorized 16-byte loads (optional)</text>
+  </g>
+  <g stroke="var(--line)" stroke-width="1">
+    <line x1="330" y1="48" x2="552" y2="48"/><line x1="330" y1="72" x2="552" y2="72"/><line x1="330" y1="96" x2="552" y2="96"/>
+    <line x1="330" y1="120" x2="552" y2="120"/><line x1="330" y1="144" x2="552" y2="144"/><line x1="330" y1="168" x2="552" y2="168"/>
+    <line x1="330" y1="192" x2="552" y2="192"/><line x1="330" y1="216" x2="552" y2="216"/><line x1="330" y1="240" x2="552" y2="240"/><line x1="330" y1="264" x2="552" y2="264"/>
+  </g>
+  <g>
+    <rect x="560" y="38" width="380" height="20" rx="4" fill="var(--s2-soft)"/><text x="568" y="52">0.2 three toy kernels</text>
+    <rect x="560" y="62" width="380" height="20" rx="4" fill="var(--s2-soft)"/><text x="568" y="76">0.2 three toy kernels</text>
+    <rect x="560" y="86" width="380" height="20" rx="4" fill="var(--s2-soft)"/><text x="568" y="100">0.3 online softmax by hand · 1.3 Path A · 2.2 merge</text>
+    <rect x="560" y="110" width="380" height="20" rx="4" fill="var(--s1-soft)"/><text x="568" y="124">1.2 cache_write kernel</text>
+    <rect x="560" y="134" width="380" height="20" rx="4" fill="var(--s1-soft)"/><text x="568" y="148">1.3 Path A, FP16 first</text>
+    <rect x="560" y="158" width="380" height="20" rx="4" fill="var(--s1-soft)"/><text x="568" y="172">1.4 Path A INT8 through the template</text>
+    <rect x="560" y="182" width="380" height="20" rx="4" fill="var(--s1-soft)"/><text x="568" y="196">1.6 benchmark harness</text>
+    <rect x="560" y="206" width="380" height="20" rx="4" fill="var(--s3-soft)"/><text x="568" y="220">2.1 Path B partial kernel · 2.5 selector</text>
+    <rect x="560" y="230" width="380" height="20" rx="4" fill="var(--s3-soft)"/><text x="568" y="244">2.4 profile with Nsight Compute</text>
+    <rect x="560" y="254" width="380" height="20" rx="4" fill="var(--s3-soft)"/><text x="568" y="268">2.7 optional GQA head sharing</text>
+  </g>
+  <g class="legend" transform="translate(20,300)">
+    <rect x="0" y="0" width="10" height="10" rx="2" fill="var(--s2-soft)"/><text x="16" y="10">Phase 0</text>
+    <rect x="90" y="0" width="10" height="10" rx="2" fill="var(--s1-soft)"/><text x="106" y="10">Phase 1</text>
+    <rect x="180" y="0" width="10" height="10" rx="2" fill="var(--s3-soft)"/><text x="196" y="10">Phase 2</text>
+  </g>
+  <text class="small" x="20" y="340">Resources for every concept are in the table in learning-roadmap.md. Each row has a 20-minute exercise with a check.</text>
+</svg>
+</figure>
+
+<h2>10. Build order inside Path A (piece 1.3)</h2>
+<p>Do not write the whole kernel at once. Each step has a check you can compare by hand at length 17.</p>
+<table>
+  <tr><th>Step</th><th>Kernel does</th><th>Check against</th></tr>
+  <tr><td>1</td><td>Loads q and K for token 0, computes one score, writes it to output[b, h, 0]</td><td>Python: <code>(q[b,h] @ k[0, g]) / sqrt(128)</code></td></tr>
+  <tr><td>2</td><td>Warp 0 alone loops over every token with online softmax. Warps 1 to 3 idle.</td><td><code>reference.attention.decode_attention</code> at lengths 1, 7, 17</td></tr>
+  <tr><td>3</td><td>All four warps, interleaved tokens, shared-memory merge at the end</td><td>Same, plus length 300 and a mixed batch [1, 300, 17]</td></tr>
+  <tr><td>4</td><td>Template on element type, INT8 branch loads <code>char4</code> and multiplies by the scale</td><td><code>paged_decode_attention</code> on the same INT8 cache</td></tr>
+</table>
+<figcaption>If step 3 is not green by Thursday, October 22, drop back to step 2 as the shipped Path A and say so in the paper.</figcaption>
+
+</main>
+</body>
+</html>

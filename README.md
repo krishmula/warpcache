@@ -5,6 +5,7 @@ split-history path, and a workload selector. CS 259 class project.
 
 - Scope and data contract: [docs/scope.md](docs/scope.md)
 - Plan and status: [ROADMAP.md](ROADMAP.md)
+- Step-by-step plan with what to learn first: [docs/learning-roadmap.md](docs/learning-roadmap.md)
 
 ## Setup
 

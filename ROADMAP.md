@@ -1,11 +1,24 @@
 # Roadmap: class release
 
-Today is Saturday, October 10, 2026. Class completion is Thursday, November 5.
-Submission is Monday, November 9. That leaves 26 days of work plus a 4-day buffer.
+Replanned Saturday, October 17, 2026. Class completion is Thursday, November 5.
+Submission is Monday, November 9. That leaves 19 days of work plus a 4-day buffer.
 
-The original plan put setup in October 6 to 11. That week is mostly gone, so
-Phase 0 is compressed to four days. The two hard gates (October 18 and
-October 25) stay where they were.
+Phase 0 did not run on a GPU during the week of October 10, so every gate moved
+one week. The step-by-step plan, with what to learn before each piece and the
+check that closes it, is [docs/learning-roadmap.md](docs/learning-roadmap.md).
+Its visual companion is [docs/learning-roadmap.html](docs/learning-roadmap.html).
+This file keeps the project-level status, budget, findings, and risks.
+
+| Gate | Old date | New date |
+| --- | --- | --- |
+| 0: smoke test passes on the final GPU | Tue Oct 13 | Mon Oct 19 |
+| 1: Path A INT8 and FP16 pass every test | Sun Oct 18 | Sun Oct 25 |
+| 2: Path B matches Path A, no NaNs | Sun Oct 25 | Sat Oct 31 |
+| 3: sweep done, figures, paper draft | Sun Nov 1 | Tue Nov 3 |
+
+vLLM integration moves to Part B after the class. FlashInfer is time-boxed to
+2 hours in Phase 0, with PyTorch SDPA on a gathered FP16 history as the fallback
+baseline.
 
 ## Status
 
@@ -19,7 +32,7 @@ Done:
 - [x] Model recommended: Qwen3-1.7B (see Quantization finding)
 - [x] Real K/V capture and INT8 error measurement on CPU: `scripts/kv_quant_error.py`
 
-## Decide this weekend
+## Decide by Monday, October 19
 
 These block everything else. Proposed defaults are in `docs/scope.md`.
 
@@ -82,7 +95,7 @@ attention output, INT8 cache vs bf16 cache.
 
 ## Phases and gates
 
-### Phase 0: Setup and data (Sat Oct 10 to Tue Oct 13)
+### Phase 0: Setup and data (Sat Oct 17 to Mon Oct 19)
 
 - [ ] Start the GPU instance. Run `scripts/gpu_smoke_test.sh`. It must print `SMOKE TEST PASSED`.
 - [ ] Pin working versions (driver, CUDA, PyTorch, FlashInfer) in `configs/env.md`. Commit the manifest from `results/env/`.
@@ -93,7 +106,7 @@ attention output, INT8 cache vs bf16 cache.
 
 **Done when:** smoke test passes on the GPU you will use for final numbers, captures exist, and `docs/scope.md` has no *proposed* items left.
 
-### Phase 1: Cache write and Path A (Wed Oct 14 to Sun Oct 18)
+### Phase 1: Cache write and Path A (Tue Oct 20 to Sun Oct 25)
 
 - [ ] `csrc/` skeleton: one `.cu` file, pybind binding, loaded with `torch.utils.cpp_extension.load` (JIT) for fast iteration. Wrapper in `python/` checks the contract.
 - [ ] `cache_write` kernel. Test against `PagedKVCache.write` on shuffled pages, partial tails, zeros, extreme values. Expect exact int8 match.
@@ -102,9 +115,9 @@ attention output, INT8 cache vs bf16 cache.
 - [ ] Benchmark harness in `benchmarks/`: CUDA events, warmup, repeats, working set larger than L2, one JSON line per measurement with shapes, config, and env manifest path. Build this now, not in Phase 3. Every later number goes through it.
 - [ ] First numbers: Path A INT8 vs FP16 vs FlashInfer at a few points.
 
-**Gate 1 (Sun Oct 18):** Path A INT8 passes all correctness tests. If not, cut to the single shape that works, drop the vLLM stretch for good, and spend Phase 2 finishing Path A.
+**Gate 1 (Sun Oct 25):** Path A INT8 passes all correctness tests. If not, cut to the single shape that works and spend Phase 2 finishing Path A.
 
-### Phase 2: Split path, merge, profiling, selector (Mon Oct 19 to Sun Oct 25)
+### Phase 2: Split path, merge, profiling, selector (Mon Oct 26 to Sat Oct 31)
 
 - [ ] Path B: grid over (request, query head, chunk). Each block writes (m, l, u) to a workspace. A merge kernel combines them. Handle empty chunks (m = -inf, l = 0) exactly as `reference/attention.py` does.
 - [ ] Tests: split vs direct vs reference, including more chunks than tokens.
@@ -113,20 +126,20 @@ attention output, INT8 cache vs bf16 cache.
 - [ ] Selector v1: a threshold rule from host-side metadata only (batch size, KV heads, SM count, max sequence length). No GPU-to-CPU copies per call.
 - [ ] Start the paper: background, design, and thread mapping sections. None of these depend on results.
 
-**Gate 2 (Sun Oct 25):** Path B matches Path A within tolerance and has no NaNs. If not, ship the honest fallback: reference, Path A, benchmarks, and a profile-backed explanation. Do not present broken dispatch as done.
+**Gate 2 (Sat Oct 31):** Path B matches Path A within tolerance and has no NaNs. If not, ship the honest fallback: reference, Path A, benchmarks, and a profile-backed explanation. Do not present broken dispatch as done.
 
-**Stretch:** vLLM integration only starts if Gate 2 passes by Thu Oct 22. Otherwise it moves to Part B after the class.
+**Stretch:** GQA head sharing in the kernel (one block per request and KV head) only starts if Gate 2 passes by Thu Oct 29. vLLM integration is Part B, after the class.
 
-### Phase 3: Freeze and evaluate (Mon Oct 26 to Sun Nov 1)
+### Phase 3: Freeze and evaluate (Sun Nov 1 to Tue Nov 3)
 
-- [ ] Feature freeze on Oct 26. Only bug fixes after this.
+- [ ] Feature freeze on Nov 1. Only bug fixes after this.
 - [ ] Split workloads into a tuning set and a held-out set. Tune selector thresholds on the tuning set only.
 - [ ] Full sweep: contexts 256, 1K, 4K, 8K, 16K; batch 1, 4, 16, 32; plus mixed-length batches. Compare INT8 A, INT8 B, FP16 A, FP16 B, selector, oracle, FlashInfer.
 - [ ] `scripts/make_figures.py` reads raw JSON and produces every figure. No hand-edited plots.
 - [ ] Quantization error table from captured model tensors.
-- [ ] Complete paper draft by Sun Nov 1, including limitations and negative results.
+- [ ] Complete paper draft by Tue Nov 3, including limitations and negative results.
 
-### Phase 4: Finish (Mon Nov 2 to Thu Nov 5)
+### Phase 4: Finish (Wed Nov 4 to Thu Nov 5)
 
 - [ ] Fresh GPU instance: follow README from scratch, rerun tests and one benchmark. Fix anything that breaks.
 - [ ] Record the demo: tests passing, one benchmark run, one figure, one Nsight screenshot.
@@ -143,7 +156,7 @@ Submission fixes only. No new implementation.
 | GPU or profiler access fails | Smoke test fails in Phase 0 | Switch provider immediately. Do not write kernels on a box you cannot profile. |
 | K outlier channels make per-token INT8 lossy | Already observed (see Quantization finding) | Static K smoothing. If it does not hold on held-out text, report per-token error honestly and narrow claims. |
 | INT8 is slower than FP16 | Phase 1 numbers | Valid result. Profile to explain (dequant cost, scale loads, too little parallelism). |
-| Kernel debugging eats Phase 1 | Not correct by Thu Oct 16 | Simplify: fixed shapes as template constants, no vectorized loads yet. |
+| Kernel debugging eats Phase 1 | Not correct by Thu Oct 22 | Simplify: fixed shapes as template constants, no vectorized loads yet. |
 | GPU budget | Usage log | Keep a log in `results/gpu_hours.md`. Compile and debug on small cases. |
 
 ## Paper outline
