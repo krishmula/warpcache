@@ -97,7 +97,7 @@ attention output, INT8 cache vs bf16 cache.
 
 ### Phase 0: Setup and data (Sat Oct 17 to Mon Oct 19)
 
-- [ ] Start the GPU instance. Run `scripts/gpu_smoke_test.sh`. It must print `SMOKE TEST PASSED`.
+- [x] Start the GPU instance. Run `scripts/gpu_smoke_test.sh`. It must print `SMOKE TEST PASSED`.
 - [ ] Pin working versions (driver, CUDA, PyTorch, FlashInfer) in `configs/env.md`. Commit the manifest from `results/env/`.
 - [ ] Run `uv run pytest` on the GPU box too.
 - [ ] Rerun `scripts/kv_quant_error.py` on 3 to 4 different long texts (8K tokens) with a calibration text separate from the evaluation text. Decide whether K smoothing goes into the class scope (see Quantization finding).
