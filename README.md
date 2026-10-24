@@ -23,6 +23,10 @@ uv run --group capture python scripts/kv_quant_error.py --model Qwen/Qwen3-1.7B 
 On a GPU host, run `scripts/gpu_smoke_test.sh` first. It records the
 environment, compiles a tiny CUDA extension, and checks Nsight Compute access.
 
+The GPU host is a Vast.ai Ubuntu 22.04 VM with an RTX 3090. Before `uv sync`
+there, install `ninja-build` and a CUDA toolkit with the same major version as
+torch (13.0 for torch 2.14.1+cu130). Run `ncu` as root.
+
 ## Layout
 
 | Path | Contents |

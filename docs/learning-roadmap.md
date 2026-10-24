@@ -3,6 +3,12 @@
 Written Saturday, October 17, 2026. Class completion is Thursday, November 5.
 Submission is Monday, November 9. That is 19 working days plus a 4-day buffer.
 
+> **Superseded schedule.** On October 24 a 3-day plan in [ROADMAP.md](../ROADMAP.md)
+> replaced the gates and phases below, and cut the `cache_write` kernel,
+> FlashInfer, K smoothing, GQA head sharing, and mixed-length batches. The
+> concept explanations and checks still apply. The GPU is an RTX 3090 (6 MB
+> L2), not a 4090.
+
 This doc is for one reader who has never written a CUDA kernel. It breaks every
 milestone in [ROADMAP.md](../ROADMAP.md) into pieces of 2 to 6 hours. Each
 piece names what to learn first, what to build, and the command that proves it
