@@ -1,0 +1,14 @@
+[project]
+name = "warpcache"
+version = "0.0.0"
+description = "Workload-aware CUDA decode attention over an INT8 paged KV cache"
+requires-python = ">=3.11"
+dependencies = ["numpy", "torch>=2.5"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+capture = ["transformers>=4.56", "accelerate"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

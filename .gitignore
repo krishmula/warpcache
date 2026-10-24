@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.egg-info/
+build/
+*.so
+*.ncu-rep
+*.nsys-rep
+captures/
