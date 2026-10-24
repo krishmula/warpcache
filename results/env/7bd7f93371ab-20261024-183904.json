@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-10-24T18:39:04.584476+00:00",
+  "host": "7bd7f93371ab",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.39",
+  "torch": "2.14.1+cu130",
+  "torch_cuda": "13.0",
+  "git_commit": "a0ec9f593253bd82616dec73e41d0d404f2ce7b4",
+  "git_dirty": true,
+  "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0",
+  "nvidia_smi": "NVIDIA GeForce RTX 4090, 24564 MiB, 595.91.07, 3105 MHz, 450.00 W",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 4090",
+    "capability": "8.9",
+    "sm_count": 128,
+    "memory_bytes": 25252724736,
+    "l2_bytes": 75497472
+  }
+}
