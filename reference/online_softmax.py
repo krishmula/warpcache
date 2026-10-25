@@ -5,6 +5,8 @@ each token once. Path A is one call over the whole history. Path B is one call
 per chunk, then merge_states in reference/attention.py.
 """
 
+import math
+
 import torch
 
 
@@ -18,4 +20,20 @@ def token_range_state(
     reference.attention.partial_state. An empty range returns m = -inf, l = 0,
     u = 0.
     """
-    raise NotImplementedError
+
+    d = q.shape[0]
+
+    m = torch.tensor(-math.inf)
+    l = torch.tensor(0.0)
+    u = torch.zeros(d)
+
+    for i in range(start, end):
+        z = torch.dot(q, k[i]) / math.sqrt(d)
+        new_m = torch.maximum(m, z)
+        shrink = torch.exp(m - new_m)
+        w = torch.exp(z - new_m)
+        l = l * shrink + w
+        u = u * shrink + w * v[i]
+        m = new_m
+
+    return m, l, u
