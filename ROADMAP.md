@@ -64,8 +64,8 @@ the kernel exists:
 
 - [ ] Send the scope email.
 - [x] Online softmax in Python, as a token loop and as chunks with a merge. Match `reference.attention.decode_attention` at lengths 1, 7, and 300, and with more chunks than tokens. About 2 hours.
-- [ ] One warm-up kernel: a warp row sum and row max over 128 floats with `__shfl_xor_sync`. Match `torch.sum` and `torch.amax`. About 1 hour.
-- [ ] Extension skeleton with a no-op kernel, compiled on the 3090.
+- [x] One warm-up kernel: a warp row sum and row max over 128 floats with `__shfl_xor_sync`. Match `torch.sum` and `torch.amax`. About 1 hour.
+- [x] Extension skeleton with a no-op kernel, compiled on the 3090.
 
 ### Day 2. Path A on the GPU
 
