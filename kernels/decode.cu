@@ -50,17 +50,17 @@ torch::Tensor decode_fp16(torch::Tensor q, torch::Tensor k_cache,
                     c.size(1) == PAGE && c.size(2) == HKV && c.size(3) == D,
                 "k_cache and v_cache must be fp16 [P, 16, 8, 128]");
   }
-  int b = q.size(0);
+  int batch = q.size(0);
   TORCH_CHECK(block_table.scalar_type() == torch::kInt32 &&
-                  block_table.dim() == 2 && block_table.size(0) == b,
+                  block_table.dim() == 2 && block_table.size(0) == batch,
               "block_table must be int32 [B, max_pages]");
   TORCH_CHECK(seq_lens.scalar_type() == torch::kInt32 &&
-                  seq_lens.dim() == 1 && seq_lens.size(0) == b,
+                  seq_lens.dim() == 1 && seq_lens.size(0) == batch,
               "seq_lens must be int32 [B]");
 
   auto out = torch::empty_like(q);
-  if (b > 0) {
-    decode_kernel<<<dim3(HQ, b), 32>>>(
+  if (batch > 0) {
+    decode_kernel<<<dim3(HQ, batch), 32>>>(
         reinterpret_cast<const __half *>(q.data_ptr<at::Half>()),
         reinterpret_cast<const __half *>(k_cache.data_ptr<at::Half>()),
         reinterpret_cast<const __half *>(v_cache.data_ptr<at::Half>()),
