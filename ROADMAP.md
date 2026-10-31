@@ -69,7 +69,7 @@ the kernel exists:
 
 ### Day 2. Path A on the GPU
 
-- [ ] The token-range kernel in FP16 with 1 chunk. Check it against the reference on tiny shapes first.
+- [x] The token-range kernel in FP16 with 1 chunk. Check it against the reference on tiny shapes first. 10 tests pass on the 3090, and `compute-sanitizer` reports 0 errors.
 - [ ] INT8 through the template.
 - [ ] Port the tests. Run `compute-sanitizer` once and get zero errors.
 
