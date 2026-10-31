@@ -2,12 +2,13 @@
 // Version 1 runs one warp per (request, query head). Each lane owns 4 of the
 // 128 columns, as in warp_reduce.cu.
 
+#include <cmath>
 #include <cuda_fp16.h>
 #include <torch/extension.h>
 
-constexpr int HQ = 16;  // query heads
-constexpr int HKV = 8;  // KV heads. Query head h reads KV head h / (HQ / HKV).
-constexpr int D = 128;  // head dim
+constexpr int HQ = 16;   // query heads
+constexpr int HKV = 8;   // KV heads. Query head h reads KV head h / (HQ / HKV).
+constexpr int D = 128;   // head dim
 constexpr int PAGE = 16; // tokens per page
 
 // q, out:              [B, HQ, D] fp16
@@ -17,13 +18,27 @@ constexpr int PAGE = 16; // tokens per page
 // Grid (HQ, B): blockIdx.x is the query head, blockIdx.y is the request.
 __global__ void decode_kernel(const __half *q, const __half *k_cache,
                               const __half *v_cache, const int *block_table,
-                              const int *seq_lens, int max_pages,
-                              __half *out) {
+                              const int *seq_lens, int max_pages, __half *out) {
   // Step 0. Who am I: request b, query head h, lane, KV head, history length.
+  int b = blockIdx.y;
+  int q_head = blockIdx.x;
+  int lane = threadIdx.x;
+  int hist_len = seq_lens[b];
+  int kv_head = q_head / (HQ / HKV);
 
   // Step 1. Load your 4 numbers of q as floats. __half2float(x) converts.
+  const __half *mine = q + 128 * (b * HQ + q_head) + 4 * lane;
+  __half *mine_out = out + 128 * (b * HQ + q_head) + 4 * lane;
+
+  float q_f[4];
+  for (int i = 0; i < 4; i++) {
+    q_f[i] = __half2float(mine[i]);
+  }
 
   // Step 2. Start the running state: m = -INFINITY, l = 0, u[4] = 0.
+  float m = -INFINITY;
+  float l = 0.0f;
+  float u[4] = {0};
 
   // Step 3. For each token t in [0, seq_len):
   //   a. Find token t's K row through the block table, then your 4 numbers.
@@ -32,7 +47,59 @@ __global__ void decode_kernel(const __half *q, const __half *k_cache,
   //      sqrt(128).
   //   c. Online softmax update of m, l, and your 4 u, using token t's V row.
 
+  for (int t = 0; t < hist_len; t++) {
+    int physical_page = block_table[b * max_pages + t / PAGE];
+    int slot = t % PAGE;
+    const __half *mine_k = k_cache + physical_page * (PAGE * HKV * D) +
+                           slot * (HKV * D) + kv_head * D + 4 * lane;
+    const __half *mine_v = v_cache + physical_page * (PAGE * HKV * D) +
+                           slot * (HKV * D) + kv_head * D + 4 * lane;
+
+    float k_f[4];
+    for (int i = 0; i < 4; i++) {
+      k_f[i] = __half2float(mine_k[i]);
+    }
+
+    float v_f[4];
+    for (int i = 0; i < 4; i++) {
+      v_f[i] = __half2float(mine_v[i]);
+    }
+
+    float partial = 0.0f;
+    for (int i = 0; i < 4; i++) {
+      partial += q_f[i] * k_f[i];
+    }
+
+    int shuffles[] = {16, 8, 4, 2, 1};
+    for (int i = 0; i < 5; i++) {
+      int shuffleDist = shuffles[i];
+      float shufflePartial = __shfl_xor_sync(0xffffffff, partial, shuffleDist);
+      partial += shufflePartial;
+    }
+
+    float z = partial / sqrtf(float(D));
+
+    float new_m = fmaxf(m, z);
+
+    float shrink = expf(m - new_m);
+
+    float w = expf(z - new_m);
+
+    float new_l = l * shrink + w;
+    l = new_l;
+
+    for (int i = 0; i < 4; i++) {
+      u[i] = u[i] * shrink + w * v_f[i];
+    }
+
+    m = new_m;
+  }
+
   // Step 4. Write your 4 outputs, u / l, as fp16. __float2half(x) converts.
+
+  for (int i = 0; i < 4; i++) {
+    mine_out[i] = __float2half(u[i] / l);
+  }
 }
 
 torch::Tensor decode_fp16(torch::Tensor q, torch::Tensor k_cache,
@@ -54,8 +121,8 @@ torch::Tensor decode_fp16(torch::Tensor q, torch::Tensor k_cache,
   TORCH_CHECK(block_table.scalar_type() == torch::kInt32 &&
                   block_table.dim() == 2 && block_table.size(0) == batch,
               "block_table must be int32 [B, max_pages]");
-  TORCH_CHECK(seq_lens.scalar_type() == torch::kInt32 &&
-                  seq_lens.dim() == 1 && seq_lens.size(0) == batch,
+  TORCH_CHECK(seq_lens.scalar_type() == torch::kInt32 && seq_lens.dim() == 1 &&
+                  seq_lens.size(0) == batch,
               "seq_lens must be int32 [B]");
 
   auto out = torch::empty_like(q);
