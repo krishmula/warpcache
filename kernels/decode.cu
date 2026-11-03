@@ -1,11 +1,12 @@
-// Decode attention over a paged FP16 or INT8 KV cache. Path A: one chunk per head.
-// Version 1 runs one warp per (request, query head). Each lane owns 4 of the
-// 128 columns, as in warp_reduce.cu.
+// Decode attention over a paged FP16 or INT8 KV cache. Path A: one chunk per
+// head. Version 1 runs one warp per (request, query head). Each lane owns 4 of
+// the 128 columns, as in warp_reduce.cu.
 
-#include <cmath>
 #include <c10/cuda/CUDAException.h>
+#include <cmath>
 #include <cuda_fp16.h>
 #include <torch/extension.h>
+#include <type_traits>
 
 constexpr int HQ = 16;   // query heads
 constexpr int HKV = 8;   // KV heads. Query head h reads KV head h / (HQ / HKV).
@@ -18,8 +19,20 @@ constexpr int PAGE = 16; // tokens per page
 // block_table:         [B, max_pages] int32, logical page -> physical page
 // seq_lens:            [B] int32, at least 1
 // Grid (HQ, B): blockIdx.x is the query head, blockIdx.y is the request.
-__global__ void decode_kernel(const __half *q, const __half *k_cache,
-                              const __half *v_cache, const int *block_table,
+
+__device__ float flt_convert(__half x) {
+  return __half2float(x);
+} // to convert from fp16 to fp32
+
+__device__ float flt_convert(int8_t x) {
+  return float(x);
+} // to convert from int8 to fp32
+
+template <typename T>
+
+__global__ void decode_kernel(const __half *q, const T *k_cache,
+                              const T *v_cache, const float *k_scale,
+                              const float *v_scale, const int *block_table,
                               const int *seq_lens, int max_pages, __half *out) {
   // Step 0. Who am I: request b, query head h, lane, KV head, history length.
   int b = blockIdx.y;
@@ -52,19 +65,29 @@ __global__ void decode_kernel(const __half *q, const __half *k_cache,
   for (int t = 0; t < hist_len; t++) {
     int physical_page = block_table[b * max_pages + t / PAGE];
     int slot = t % PAGE;
-    const __half *mine_k = k_cache + physical_page * (PAGE * HKV * D) +
-                           slot * (HKV * D) + kv_head * D + 4 * lane;
-    const __half *mine_v = v_cache + physical_page * (PAGE * HKV * D) +
-                           slot * (HKV * D) + kv_head * D + 4 * lane;
+    const T *mine_k = k_cache + physical_page * (PAGE * HKV * D) +
+                      slot * (HKV * D) + kv_head * D + 4 * lane;
+    const T *mine_v = v_cache + physical_page * (PAGE * HKV * D) +
+                      slot * (HKV * D) + kv_head * D + 4 * lane;
 
-    float k_f[4];
-    for (int i = 0; i < 4; i++) {
-      k_f[i] = __half2float(mine_k[i]);
+    // K/V scales are stored as [P, 16, 8], so, that means we have to know what
+    // page we want to access, and then we have to know which of the 16 slots
+    // the token is in, and then, we have to know what head we want to access.
+
+    float ks = 1.0f;
+    float vs = 1.0f;
+    if constexpr (std::is_same_v<T, int8_t>) {
+      const float *k_s = k_scale + physical_page * (PAGE * HKV) + slot * HKV;
+      const float *v_s = v_scale + physical_page * (PAGE * HKV) + slot * HKV;
+      ks = k_s[kv_head];
+      vs = v_s[kv_head];
     }
 
+    float k_f[4];
     float v_f[4];
     for (int i = 0; i < 4; i++) {
-      v_f[i] = __half2float(mine_v[i]);
+      k_f[i] = flt_convert(mine_k[i]) * ks;
+      v_f[i] = flt_convert(mine_v[i]) * vs;
     }
 
     float partial = 0.0f;
@@ -105,7 +128,8 @@ __global__ void decode_kernel(const __half *q, const __half *k_cache,
 }
 
 torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,
-                     torch::Tensor v_cache, std::optional<torch::Tensor> k_scale,
+                     torch::Tensor v_cache,
+                     std::optional<torch::Tensor> k_scale,
                      std::optional<torch::Tensor> v_scale,
                      torch::Tensor block_table, torch::Tensor seq_lens) {
   for (auto &t : {q, k_cache, v_cache, block_table, seq_lens}) {
@@ -124,15 +148,17 @@ torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,
                 "k_cache and v_cache must be [P, 16, 8, 128] of one dtype");
   }
   bool int8 = cache_type == torch::kInt8;
-  TORCH_CHECK(k_scale.has_value() == int8 && v_scale.has_value() == int8,
-              "k_scale and v_scale are required for int8 and must be None for fp16");
+  TORCH_CHECK(
+      k_scale.has_value() == int8 && v_scale.has_value() == int8,
+      "k_scale and v_scale are required for int8 and must be None for fp16");
   if (int8) {
     for (auto &s : {*k_scale, *v_scale}) {
-      TORCH_CHECK(s.is_cuda() && s.is_contiguous() &&
-                      s.scalar_type() == torch::kFloat32 && s.dim() == 3 &&
-                      s.size(0) == k_cache.size(0) && s.size(1) == PAGE &&
-                      s.size(2) == HKV,
-                  "k_scale and v_scale must be contiguous fp32 [P, 16, 8] on the GPU");
+      TORCH_CHECK(
+          s.is_cuda() && s.is_contiguous() &&
+              s.scalar_type() == torch::kFloat32 && s.dim() == 3 &&
+              s.size(0) == k_cache.size(0) && s.size(1) == PAGE &&
+              s.size(2) == HKV,
+          "k_scale and v_scale must be contiguous fp32 [P, 16, 8] on the GPU");
     }
   }
   int batch = q.size(0);
@@ -151,17 +177,17 @@ torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,
   auto q_ptr = reinterpret_cast<const __half *>(q.data_ptr<at::Half>());
   auto out_ptr = reinterpret_cast<__half *>(out.data_ptr<at::Half>());
   if (int8) {
-    decode_kernel<int8_t><<<grid, 32>>>(
-        q_ptr, k_cache.data_ptr<int8_t>(), v_cache.data_ptr<int8_t>(),
-        k_scale->data_ptr<float>(), v_scale->data_ptr<float>(),
-        block_table.data_ptr<int>(), seq_lens.data_ptr<int>(),
-        block_table.size(1), out_ptr);
+    decode_kernel<int8_t>
+        <<<grid, 32>>>(q_ptr, k_cache.data_ptr<int8_t>(),
+                       v_cache.data_ptr<int8_t>(), k_scale->data_ptr<float>(),
+                       v_scale->data_ptr<float>(), block_table.data_ptr<int>(),
+                       seq_lens.data_ptr<int>(), block_table.size(1), out_ptr);
   } else {
     decode_kernel<__half><<<grid, 32>>>(
         q_ptr, reinterpret_cast<const __half *>(k_cache.data_ptr<at::Half>()),
-        reinterpret_cast<const __half *>(v_cache.data_ptr<at::Half>()),
-        nullptr, nullptr, block_table.data_ptr<int>(),
-        seq_lens.data_ptr<int>(), block_table.size(1), out_ptr);
+        reinterpret_cast<const __half *>(v_cache.data_ptr<at::Half>()), nullptr,
+        nullptr, block_table.data_ptr<int>(), seq_lens.data_ptr<int>(),
+        block_table.size(1), out_ptr);
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   return out;
