@@ -69,8 +69,8 @@ the kernel exists:
 ### Day 2. Path A on the GPU
 
 - [x] The token-range kernel in FP16 with 1 chunk. Check it against the reference on tiny shapes first. 10 tests pass on the 3090, and `compute-sanitizer` reports 0 errors.
-- [ ] INT8 through the template.
-- [ ] Port the tests. Run `compute-sanitizer` once and get zero errors.
+- [x] INT8 through the template. All 20 decode tests pass on an RTX 4090 (FP16 and INT8), November 3.
+- [x] Port the tests. Run `compute-sanitizer` once and get zero errors. 0 errors on the 4090, November 3.
 
 **Cutoff.** If Path A INT8 does not pass every test by the end of day 2, day 3
 finishes Path A and Path B is dropped.
