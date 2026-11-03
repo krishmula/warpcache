@@ -29,13 +29,12 @@ Done:
 | Dev workflow | Write code on the Mac. Run the VM only to compile, test, and measure. | No CUDA on a Mac. Billing runs whenever the instance exists. |
 | Model | Qwen3-1.7B, pinned revision | 8 KV heads and head dim 128, the same KV head shape as Qwen3-8B and Llama-3-8B. |
 | Baseline | PyTorch SDPA on a gathered FP16 history | FlashInfer is cut. |
-| Cache write | PyTorch, with `reference/quant.py` | The `cache_write` kernel is cut. |
+| Cache write | A `cache_write` kernel on day 3, after Path B. `reference/quant.py` stays as the reference it must match exactly. | Restored November 1. The whole INT8 path then runs on the GPU, and the write cost per decode step can be measured. |
 | Merge | PyTorch, with the math of `merge_states` | A CUDA merge kernel only if time allows. |
 | Scope check | Email the instructor the revised title, abstract, and cut list | Day 1, step 1. |
 
 ## Cut, and the paper says so
 
-- The `cache_write` kernel. The cache is quantized in PyTorch with `reference/quant.py`.
 - FlashInfer. PyTorch SDPA on a gathered FP16 history is the baseline.
 - K smoothing, GQA head sharing, and mixed-length batches.
 - The CUDA merge kernel, unless time allows. The merge runs in PyTorch.
@@ -79,7 +78,8 @@ finishes Path A and Path B is dropped.
 ### Day 3. Path B, numbers, writing
 
 - [ ] Path B, time-boxed to 4 hours. Turn on chunks above 1, merge in PyTorch, and test split vs direct vs reference, including more chunks than tokens.
-- [ ] Time Path A, Path B, and SDPA with CUDA events, INT8 and FP16, at batch 1, 4, and 16, and context 4K and 16K.
+- [ ] The `cache_write` kernel, time-boxed to 4 hours. One warp per (token, KV head) row, as in [docs/learning-roadmap.md](docs/learning-roadmap.md) section 1.2. Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum.
+- [ ] Time Path A, Path B, and SDPA with CUDA events, INT8 and FP16, at batch 1, 4, and 16, and context 4K and 16K. Time `cache_write` for one new token per request at the same batch sizes.
 - [ ] Run `ncu` on 2 to 4 cases. Record DRAM throughput as a percentage of peak.
 - [ ] Write a selector rule from the measurements, for example "split when batch times query heads is below the SM count". Label it as hand-set.
 - [ ] Make the figures and write the paper.
@@ -141,6 +141,7 @@ attention output, INT8 cache vs bf16 cache.
 
 | Risk | Early signal | Response |
 | --- | --- | --- |
+| `cache_write` pushes day 3 past its timing and paper work | Not an exact match at the end of its 4 hours | Ship the decode results with the PyTorch write, and finish `cache_write` in the November 6 to 9 buffer. |
 | Kernel debugging eats day 2 | Path A FP16 not correct by midday | Fixed shapes as template constants, no vectorized loads yet. The cutoff rule drops Path B. |
 | INT8 is slower than FP16 | Day 3 numbers | Valid result. Profile to explain (dequant cost, scale loads, too little parallelism). |
 | K outlier channels make per-token INT8 lossy | Already observed (see Quantization finding) | Report per-token error honestly and narrow claims. |
