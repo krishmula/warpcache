@@ -53,15 +53,15 @@ One CUDA op:
   m = -inf, l = 0, u = 0.
 - `k_scale` and `v_scale` are ignored for an FP16 cache.
 
-New tokens are written to the cache in PyTorch with `PagedKVCache.write`, which
-quantizes with `reference/quant.py`. The selector is a hand-set rule written
+New tokens are written to the cache by a `cache_write` kernel. It must match
+`PagedKVCache.write`, which quantizes with `reference/quant.py`, exactly. The selector is a hand-set rule written
 from the measurements, and the paper labels it as hand-set.
 
 ## Out of scope
 
 Prefill, multiple query tokens, prefix sharing, live format conversion,
 multi-GPU, arbitrary models, and production packaging. Also cut, and the paper
-says so: the `cache_write` kernel, FlashInfer (SDPA on a gathered FP16 history
+says so: FlashInfer (SDPA on a gathered FP16 history
 is the baseline), K smoothing, GQA head sharing, mixed-length batches, and the
 CUDA merge kernel unless time allows. vLLM integration is Part B, after the
 class.
