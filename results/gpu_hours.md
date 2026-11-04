@@ -9,3 +9,4 @@ Fill hours and cost from the provider's billing page.
 | 2026-10-24 | Vast.ai | RTX 3090 (VM) | TBD | TBD | Gate 0 passed. Manifest `results/env/ubuntu-20261024-191743.json`. |
 | 2026-10-31 | Vast.ai | RTX 3090 (VM) | TBD | TBD | New host, smoke test passed. Decode v1 FP16: 10 tests pass, `compute-sanitizer` 0 errors. Manifest `results/env/ubuntu-20261031-201423.json`. |
 | 2026-11-03 | Vast.ai | RTX 4090 (VM) | TBD | TBD | Correctness only. Smoke test passed, `ncu` counters work. Decode v1 FP16 and INT8: 20 tests pass, `compute-sanitizer` 0 errors. Manifest `results/env/ubuntu-20261103-023710.json`. |
+| 2026-11-04 | Vast.ai | RTX 3090 (VM) | TBD | TBD | Smoke test passed, `ncu` counters work. Path B: 52 decode tests pass, `compute-sanitizer` 0 errors, full suite 97 pass. `git_dirty` was only the untracked CUDA keyring `.deb`. Manifest `results/env/ubuntu-20261104-233543.json`. |
