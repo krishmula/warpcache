@@ -1,6 +1,7 @@
-// Decode attention over a paged FP16 or INT8 KV cache. Path A: one chunk per
-// head. Version 1 runs one warp per (request, query head). Each lane owns 4 of
-// the 128 columns, as in warp_reduce.cu.
+// Decode attention over a paged FP16 or INT8 KV cache. Version 1 runs one warp
+// per (request, query head, chunk). Each lane owns 4 of the 128 columns, as in
+// warp_reduce.cu. Path A (1 chunk) writes the output. Path B (more than 1
+// chunk) writes each chunk's partial state, and PyTorch merges them.
 
 #include <c10/cuda/CUDAException.h>
 #include <cmath>
@@ -18,28 +19,32 @@ constexpr int PAGE = 16; // tokens per page
 // k_scale, v_scale:    [P, PAGE, HKV] fp32 for int8, nullptr for fp16
 // block_table:         [B, max_pages] int32, logical page -> physical page
 // seq_lens:            [B] int32, at least 1
-// Grid (HQ, B): blockIdx.x is the query head, blockIdx.y is the request.
+// m_ptr, l_ptr:        [B, HQ, C] fp32 for Path B, nullptr for Path A
+// u_ptr:               [B, HQ, C, D] fp32 for Path B, nullptr for Path A
+// Grid (HQ, B, C): blockIdx.x is the query head, blockIdx.y is the request,
+// blockIdx.z is the chunk.
 
-__device__ float flt_convert(__half x) {
-  return __half2float(x);
-} // to convert from fp16 to fp32
+__device__ float flt_convert(__half x) { return __half2float(x); }
 
-__device__ float flt_convert(int8_t x) {
-  return float(x);
-} // to convert from int8 to fp32
+__device__ float flt_convert(int8_t x) { return float(x); }
 
 template <typename T>
-
 __global__ void decode_kernel(const __half *q, const T *k_cache,
                               const T *v_cache, const float *k_scale,
                               const float *v_scale, const int *block_table,
-                              const int *seq_lens, int max_pages, __half *out) {
+                              const int *seq_lens, int max_pages, __half *out,
+                              float *m_ptr, float *l_ptr, float *u_ptr) {
   // Step 0. Who am I: request b, query head h, lane, KV head, history length.
   int b = blockIdx.y;
   int q_head = blockIdx.x;
   int lane = threadIdx.x;
   int hist_len = seq_lens[b];
   int kv_head = q_head / (HQ / HKV);
+  int chunk_size = (hist_len + gridDim.z - 1) / gridDim.z;
+
+  // This block's chunk of the history. The last chunks can be short or empty.
+  int start = chunk_size * blockIdx.z;
+  int end = start + chunk_size;
 
   // Step 1. Load your 4 numbers of q as floats. __half2float(x) converts.
   const __half *mine = q + 128 * (b * HQ + q_head) + 4 * lane;
@@ -55,14 +60,21 @@ __global__ void decode_kernel(const __half *q, const T *k_cache,
   float l = 0.0f;
   float u[4] = {0};
 
-  // Step 3. For each token t in [0, seq_len):
+  int ws_slot = b * (HQ * gridDim.z) + q_head * gridDim.z + blockIdx.z;
+  float *mine_m = m_ptr + ws_slot;
+  float *mine_l = l_ptr + ws_slot;
+  float *mine_u = u_ptr + ws_slot * D + 4 * lane;
+
+  // Step 3. For each token t in [start, end):
   //   a. Find token t's K row through the block table, then your 4 numbers.
   //   b. Partial dot product of your 4 q and 4 K numbers, then five
   //      __shfl_xor_sync rounds give every lane the full score. Divide by
   //      sqrt(128).
   //   c. Online softmax update of m, l, and your 4 u, using token t's V row.
 
-  for (int t = 0; t < hist_len; t++) {
+  for (int t = start; t < end; t++) {
+    if (t >= hist_len)
+      break;
     int physical_page = block_table[b * max_pages + t / PAGE];
     int slot = t % PAGE;
     const T *mine_k = k_cache + physical_page * (PAGE * HKV * D) +
@@ -103,13 +115,9 @@ __global__ void decode_kernel(const __half *q, const T *k_cache,
     }
 
     float z = partial / sqrtf(float(D));
-
     float new_m = fmaxf(m, z);
-
     float shrink = expf(m - new_m);
-
     float w = expf(z - new_m);
-
     float new_l = l * shrink + w;
     l = new_l;
 
@@ -120,18 +128,29 @@ __global__ void decode_kernel(const __half *q, const T *k_cache,
     m = new_m;
   }
 
-  // Step 4. Write your 4 outputs, u / l, as fp16. __float2half(x) converts.
-
-  for (int i = 0; i < 4; i++) {
-    mine_out[i] = __float2half(u[i] / l);
+  // Step 4. Path A writes u / l as fp16. Path B writes the partial state
+  // without the divide, so an empty chunk (l = 0) never divides by zero.
+  if (gridDim.z == 1) {
+    for (int i = 0; i < 4; i++) {
+      mine_out[i] = __float2half(u[i] / l);
+    }
+  } else {
+    if (lane == 0) {
+      mine_m[0] = m;
+      mine_l[0] = l;
+    }
+    for (int i = 0; i < 4; i++) {
+      mine_u[i] = u[i];
+    }
   }
 }
 
-torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,
-                     torch::Tensor v_cache,
-                     std::optional<torch::Tensor> k_scale,
-                     std::optional<torch::Tensor> v_scale,
-                     torch::Tensor block_table, torch::Tensor seq_lens) {
+std::vector<torch::Tensor> decode(torch::Tensor q, torch::Tensor k_cache,
+                                  torch::Tensor v_cache,
+                                  std::optional<torch::Tensor> k_scale,
+                                  std::optional<torch::Tensor> v_scale,
+                                  torch::Tensor block_table,
+                                  torch::Tensor seq_lens, int num_chunks) {
   for (auto &t : {q, k_cache, v_cache, block_table, seq_lens}) {
     TORCH_CHECK(t.is_cuda() && t.is_contiguous(),
                 "all inputs must be contiguous on the GPU");
@@ -168,27 +187,42 @@ torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,
   TORCH_CHECK(seq_lens.scalar_type() == torch::kInt32 && seq_lens.dim() == 1 &&
                   seq_lens.size(0) == batch,
               "seq_lens must be int32 [B]");
+  TORCH_CHECK(num_chunks > 0, "num_chunks should be greater than 0");
 
   auto out = torch::empty_like(q);
   if (batch == 0) {
-    return out;
+    return {out};
   }
-  dim3 grid(HQ, batch);
+  torch::Tensor m_ws, l_ws, u_ws;
+  if (num_chunks > 1) {
+    auto f32 = q.options().dtype(torch::kFloat32);
+    m_ws = torch::empty({batch, HQ, num_chunks}, f32);
+    l_ws = torch::empty({batch, HQ, num_chunks}, f32);
+    u_ws = torch::empty({batch, HQ, num_chunks, D}, f32);
+  }
+  float *m_ptr = m_ws.defined() ? m_ws.data_ptr<float>() : nullptr;
+  float *l_ptr = l_ws.defined() ? l_ws.data_ptr<float>() : nullptr;
+  float *u_ptr = u_ws.defined() ? u_ws.data_ptr<float>() : nullptr;
+
+  dim3 grid(HQ, batch, num_chunks);
   auto q_ptr = reinterpret_cast<const __half *>(q.data_ptr<at::Half>());
   auto out_ptr = reinterpret_cast<__half *>(out.data_ptr<at::Half>());
   if (int8) {
-    decode_kernel<int8_t>
-        <<<grid, 32>>>(q_ptr, k_cache.data_ptr<int8_t>(),
-                       v_cache.data_ptr<int8_t>(), k_scale->data_ptr<float>(),
-                       v_scale->data_ptr<float>(), block_table.data_ptr<int>(),
-                       seq_lens.data_ptr<int>(), block_table.size(1), out_ptr);
+    decode_kernel<int8_t><<<grid, 32>>>(
+        q_ptr, k_cache.data_ptr<int8_t>(), v_cache.data_ptr<int8_t>(),
+        k_scale->data_ptr<float>(), v_scale->data_ptr<float>(),
+        block_table.data_ptr<int>(), seq_lens.data_ptr<int>(),
+        block_table.size(1), out_ptr, m_ptr, l_ptr, u_ptr);
   } else {
     decode_kernel<__half><<<grid, 32>>>(
         q_ptr, reinterpret_cast<const __half *>(k_cache.data_ptr<at::Half>()),
         reinterpret_cast<const __half *>(v_cache.data_ptr<at::Half>()), nullptr,
         nullptr, block_table.data_ptr<int>(), seq_lens.data_ptr<int>(),
-        block_table.size(1), out_ptr);
+        block_table.size(1), out_ptr, m_ptr, l_ptr, u_ptr);
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
-  return out;
+  if (num_chunks == 1)
+    return {out};
+  else
+    return {m_ws, l_ws, u_ws};
 }
