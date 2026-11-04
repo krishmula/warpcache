@@ -61,42 +61,74 @@ the kernel exists:
 
 ### Day 1. Math and skeleton, mostly on the Mac
 
-- [ ] Send the scope email.
-- [x] Online softmax in Python, as a token loop and as chunks with a merge. Match `reference.attention.decode_attention` at lengths 1, 7, and 300, and with more chunks than tokens. About 2 hours.
-- [x] One warm-up kernel: a warp row sum and row max over 128 floats with `__shfl_xor_sync`. Match `torch.sum` and `torch.amax`. About 1 hour.
-- [x] Extension skeleton with a no-op kernel, compiled on the 3090.
+- [ ] **Scope email** to the instructor. This is Day 1, step 1.
+  - [ ] Draft the revised title from `docs/scope.md`, a short abstract, and the cut list from "Cut, and the paper says so".
+  - [ ] Send it. Check: the instructor replies, or the sent mail is on record.
+- [x] **Online softmax in Python**, about 2 hours.
+  - [x] Stub and tests in `tests/test_online_softmax.py`.
+  - [x] Online softmax over a range of tokens in `reference/online_softmax.py`, as a token loop and as chunks with a merge.
+  - [x] Check: a hand-worked example, an empty range contributes nothing, a match with `reference.attention.decode_attention` at lengths 1, 7 and 300 and with more chunks than tokens, large scores stay finite, and token order does not change the output.
+- [x] **Warm-up kernel**, about 1 hour. A warp row sum and row max over 128 floats with `__shfl_xor_sync`, in `kernels/warp_reduce.cu`.
+  - [x] One warp per row, 4 values per lane, five shuffle rounds.
+  - [x] Check: `tests/test_warp_reduce.py` matches `torch.sum` and `torch.amax` on random rows, every column counts, all-negative rows, and a max in the first and last column.
+- [x] **Extension skeleton**, built with `load_inline` from a Python wrapper and compiled on the 3090.
 
 ### Day 2. Path A on the GPU
 
-- [x] The token-range kernel in FP16 with 1 chunk. Check it against the reference on tiny shapes first. 10 tests pass on the 3090, and `compute-sanitizer` reports 0 errors.
-- [x] INT8 through the template. All 20 decode tests pass on an RTX 4090 (FP16 and INT8), November 3.
-- [x] Port the tests. Run `compute-sanitizer` once and get zero errors. 0 errors on the 4090, November 3.
+- [x] **FP16 decode kernel with 1 chunk.** 10 tests pass on the 3090, and `compute-sanitizer` reports 0 errors, October 31.
+  - [x] Stub, host checks, and tests in `tests/test_decode.py`.
+  - [x] One block of 32 threads per (request, query head). Each lane owns 4 of the 128 columns.
+  - [x] Per token, find the physical page through the block table and the slot in the page, then the lane's 4 K and V numbers.
+  - [x] Partial dot product, five `__shfl_xor_sync` rounds for the full score, divide by √128.
+  - [x] Online softmax update of m, l and the lane's 4 u numbers. Write u / l as FP16.
+  - [x] Check: one token returns its V row exactly, a match with the reference at lengths 2, 15, 16, 17, 300 and 2048, a batch with shuffled pages, and large scores stay finite.
+- [x] **INT8 through the template.** All 20 decode tests pass on an RTX 4090, FP16 and INT8, November 3.
+  - [x] The host path launches `decode_kernel<int8_t>` or `decode_kernel<__half>` and checks the scales.
+  - [x] Template the kernel on the cache element type. Overloaded `flt_convert` turns either type into float.
+  - [x] Load the K and V scale per (page, slot, KV head) inside `if constexpr`, so the FP16 copy never reads the null scale pointers.
+- [x] **Port the tests and run `compute-sanitizer`.** 0 errors on the 4090, November 3.
 
 **Cutoff.** If Path A INT8 does not pass every test by the end of day 2, day 3
 finishes Path A and Path B is dropped.
 
 ### Day 3. Path B, numbers, writing
 
-- [ ] Path B, time-boxed to 4 hours. Turn on chunks above 1, merge in PyTorch, and test split vs direct vs reference, including more chunks than tokens.
-- [ ] The `cache_write` kernel, time-boxed to 4 hours. One warp per (token, KV head) row, as in [docs/learning-roadmap.md](docs/learning-roadmap.md) section 1.2. Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum.
-- [ ] Time Path A, Path B, and SDPA with CUDA events, INT8 and FP16, at batch 1, 4, and 16, and context 4K and 16K. Time `cache_write` for one new token per request at the same batch sizes.
-- [ ] Run `ncu` on 2 to 4 cases. Record DRAM throughput as a percentage of peak.
-- [ ] Write a selector rule from the measurements, for example "split when batch times query heads is below the SM count". Label it as hand-set.
-- [ ] Make the figures and write the paper.
-
-### Plumbing, built in parallel
-
-- [ ] Test port for both paths
-- [ ] Benchmark script
-- [ ] SDPA baseline
-- [ ] Figure script
-- [ ] Scope email draft
+- [ ] **Path B**, time-boxed to 4 hours. Each (request, query head) gets `num_chunks` blocks. Each block walks one chunk of the history and writes its partial state to the workspace. PyTorch merges the partial states.
+  - [ ] Step 1. Chunk ranges. The grid gets a third size, the chunk count. Each block works out its own chunk from `blockIdx.z` and `gridDim.z`: chunk size = history length / chunk count, rounded up, the same rule as `split_decode_attention`. The loop stops at the last token. Check: the 20 existing decode tests pass with 1 chunk. Code written November 4, not yet run on a GPU.
+  - [ ] Step 2. Workspace. With more than 1 chunk, the host function makes FP32 m and l `[B, HQ, C]` and u `[B, HQ, C, D]`. Each block writes its m, l and u to its own slot with no divide. `decode(...)` in C++ returns a list: the output for 1 chunk, or m, l and u. Check: `test_each_chunk_writes_its_partial_state` matches `partial_state` per chunk at 4 and 8 chunks, FP16 and INT8, and `compute-sanitizer` reports 0 errors. Code written November 4, not yet run on a GPU.
+  - [ ] Step 3. Merge. In `kernels/decode.py`, move the chunk dimension to the front, call `merge_states`, cast to FP16, and remove the `NotImplementedError`. Check: new tests at 2, 4 and 8 chunks, FP16 and INT8, match `paged_decode_attention`: `test_merged_chunks_match_reference`, plus `test_large_scores_stay_finite` at 4 chunks. Code written November 4, not yet run on a GPU.
+  - [ ] Step 4. More chunks than tokens. Empty chunks write m = -inf, l = 0, u = 0 and never divide. Check: `test_more_chunks_than_tokens` runs 5 tokens with 8 chunks through the full `decode(...)`, and `compute-sanitizer` reports 0 errors. No kernel change was needed. Test written November 4, not yet run on a GPU.
+- [ ] **The `cache_write` kernel**, time-boxed to 4 hours. One warp per (token, KV head) row, as in [docs/learning-roadmap.md](docs/learning-roadmap.md) section 1.2. If it misses the time box, ship with the PyTorch write and finish it in the November 6 to 9 buffer.
+  - [ ] Map each new token's slot to (page, slot in page) through the block table.
+  - [ ] Absmax of the 128 values with `__shfl_xor_sync`. Scale = absmax / 127, or 1.0 when absmax is 0. Lane 0 stores the scale.
+  - [ ] Quantize with `__float2int_rn`, clamp to [-127, 127], and store INT8. The FP16 cache stores the values as they are, with no scale.
+  - [ ] Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum. Port the `test_write_*` cases from `tests/test_reference.py`. `compute-sanitizer` reports 0 errors.
+- [ ] **Timing** with CUDA events on the 3090 only.
+  - [ ] Benchmark script. Working sets larger than 12 MiB so repeats do not read a warm L2. 10 warmup calls, 50 timed calls, median and spread. One result line per case, with the git commit and the host manifest.
+  - [ ] SDPA baseline on a gathered FP16 history.
+  - [ ] Run Path A, Path B and SDPA, FP16 and INT8, at batch size 1, 4 and 16 and history length 4K and 16K. Sweep the chunk count for Path B.
+  - [ ] Time `cache_write` for one new token per request at the same batch sizes.
+  - [ ] Check: the same case run twice gives medians within 3%. Achieved bandwidth stays below the 3090's 936 GB/s peak.
+- [ ] **`ncu`** on 2 to 4 cases, for example Path A and Path B at batch size 1 and 16K history. Record DRAM throughput as a percentage of peak, achieved occupancy and registers per thread. Check: one sentence per case that explains the number.
+- [ ] **Selector rule** from the measurements, for example "use Path B when batch size times query heads is below the SM count". Label it as hand-set. Check: on the measured cases, it is never more than 10% slower than the best chunk count.
+- [ ] **Figures and the paper.**
+  - [ ] Figure script that reads the benchmark result lines.
+  - [ ] Figures: latency against history length and batch size for Path A, Path B and SDPA, INT8 against FP16, the chunk-count sweep, and the cost of `cache_write`.
+  - [ ] Paper sections 1 to 4 from the outline below. They do not need results.
+  - [ ] Paper sections 5 and 6 from the measurements and the `ncu` cases. Section 7 from the cut list.
 
 ### After day 3, before November 5
 
-- [ ] Fresh GPU instance: follow README from scratch, rerun tests and one benchmark. Fix anything that breaks.
-- [ ] Record the demo: tests passing, one benchmark run, one figure, one Nsight screenshot.
-- [ ] Final paper pass.
+- [ ] **Fresh GPU instance.**
+  - [ ] Start a new host and run `scripts/gpu_smoke_test.sh`.
+  - [ ] Follow the README from scratch, with no steps from memory.
+  - [ ] Run `uv run pytest`, `compute-sanitizer` once, and one benchmark case.
+  - [ ] Fix the README and anything else that breaks. Check: a second pass works with no changes.
+- [ ] **Record the demo.**
+  - [ ] Tests passing, one benchmark run, one figure, and one Nsight screenshot.
+- [ ] **Final paper pass.**
+  - [ ] Every number in the paper matches a result line or an `ncu` report.
+  - [ ] The selector is labelled hand-set. The cut list and SmoothAttention (Lin et al., 2024) are cited.
 
 November 6 to 9 is buffer. Submission fixes only.
 
