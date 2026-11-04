@@ -6,16 +6,18 @@ from pathlib import Path
 import torch
 from torch.utils.cpp_extension import load_inline
 
+from reference.attention import merge_states
+
 
 @cache
 def _ext():
     return load_inline(
         name="decode",
         cpp_sources=(
-            "torch::Tensor decode(torch::Tensor q, torch::Tensor k_cache,"
+            "std::vector<torch::Tensor> decode(torch::Tensor q, torch::Tensor k_cache,"
             " torch::Tensor v_cache, std::optional<torch::Tensor> k_scale,"
             " std::optional<torch::Tensor> v_scale,"
-            " torch::Tensor block_table, torch::Tensor seq_lens);"
+            " torch::Tensor block_table, torch::Tensor seq_lens, int num_chunks);"
         ),
         cuda_sources=(Path(__file__).parent / "decode.cu").read_text(),
         functions=["decode"],
@@ -33,6 +35,10 @@ def decode(
     num_chunks: int = 1,
 ) -> torch.Tensor:
     """Decode attention with the contract in docs/scope.md. Returns fp16 [B, 16, 128]."""
-    if num_chunks != 1:
-        raise NotImplementedError("Path B (num_chunks > 1) is day 3")
-    return _ext().decode(q, k_cache, v_cache, k_scale, v_scale, block_table, seq_lens)
+    result = _ext().decode(
+        q, k_cache, v_cache, k_scale, v_scale, block_table, seq_lens, num_chunks
+    )
+    if len(result) == 1:
+        return result[0]
+    m, l, u = (torch.movedim(t, 2, 0) for t in result)
+    return merge_states(m, l, u).half()
