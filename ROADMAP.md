@@ -102,7 +102,7 @@ finishes Path A and Path B is dropped.
   - [ ] Map each new token's slot to (page, slot in page) through the block table.
   - [ ] Absmax of the 128 values with `__shfl_xor_sync`. Scale = absmax / 127, or 1.0 when absmax is 0. Lane 0 stores the scale.
   - [ ] Quantize with `__float2int_rn`, clamp to [-127, 127], and store INT8. The FP16 cache stores the values as they are, with no scale.
-  - [ ] Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum. Port the `test_write_*` cases from `tests/test_reference.py`. `compute-sanitizer` reports 0 errors.
+  - [ ] Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum. The tests are in `tests/test_cache_write.py`, ported from `test_quant_zero_vector`, `test_quant_extreme_finite`, `test_gather_shuffled_pages_and_partial_tail` and `test_append_across_page_boundary_matches_bulk_write` in `tests/test_reference.py`. `compute-sanitizer` reports 0 errors.
 - [ ] **Timing** with CUDA events on the 3090 only.
   - [ ] Benchmark script. Working sets larger than 12 MiB so repeats do not read a warm L2. 10 warmup calls, 50 timed calls, median and spread. One result line per case, with the git commit and the host manifest.
   - [ ] SDPA baseline on a gathered FP16 history.
