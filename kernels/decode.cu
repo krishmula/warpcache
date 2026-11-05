@@ -76,11 +76,11 @@ __global__ void decode_kernel(const __half *q, const T *k_cache,
     if (t >= hist_len)
       break;
     int physical_page = block_table[b * max_pages + t / PAGE];
-    int slot = t % PAGE;
+    int page_slot = t % PAGE;
     const T *mine_k = k_cache + physical_page * (PAGE * HKV * D) +
-                      slot * (HKV * D) + kv_head * D + 4 * lane;
+                      page_slot * (HKV * D) + kv_head * D + 4 * lane;
     const T *mine_v = v_cache + physical_page * (PAGE * HKV * D) +
-                      slot * (HKV * D) + kv_head * D + 4 * lane;
+                      page_slot * (HKV * D) + kv_head * D + 4 * lane;
 
     // K/V scales are stored as [P, 16, 8], so, that means we have to know what
     // page we want to access, and then we have to know which of the 16 slots
@@ -89,8 +89,8 @@ __global__ void decode_kernel(const __half *q, const T *k_cache,
     float ks = 1.0f;
     float vs = 1.0f;
     if constexpr (std::is_same_v<T, int8_t>) {
-      const float *k_s = k_scale + physical_page * (PAGE * HKV) + slot * HKV;
-      const float *v_s = v_scale + physical_page * (PAGE * HKV) + slot * HKV;
+      const float *k_s = k_scale + physical_page * (PAGE * HKV) + page_slot * HKV;
+      const float *v_s = v_scale + physical_page * (PAGE * HKV) + page_slot * HKV;
       ks = k_s[kv_head];
       vs = v_s[kv_head];
     }
