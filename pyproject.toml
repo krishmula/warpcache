@@ -1,8 +1,10 @@
 [project]
 name = "warpcache"
 version = "0.0.0"
-description = "Workload-aware CUDA decode attention over an INT8 paged KV cache"
+description = "CUDA decode attention over INT8 and FP16 paged KV caches, exploring quantization and GPU parallelism for LLM inference"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["numpy", "torch>=2.5"]
 
 [dependency-groups]
