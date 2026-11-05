@@ -37,3 +37,10 @@ _Avoid_: split decode
 **Block**:
 One unit that the grid launches, one per grid cell. In this kernel a block is one warp of 32 threads, and "warp" is used only when the 32 threads working together matters, as in the shuffles.
 _Avoid_: CTA
+
+**Slot**:
+One of the 16 places in a page. A slot holds one token's K and V for every KV head, for one layer. Its number across the whole cache is page × 16 + page slot.
+
+**Page slot**:
+A slot's position inside its page, from 0 to 15.
+_Avoid_: offset
