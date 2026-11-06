@@ -3,6 +3,8 @@
 // in decode.cu. It must match PagedKVCache.write in reference/paged.py exactly.
 
 #include <c10/cuda/CUDAException.h>
+#include <cmath>
+#include <cstdlib>
 #include <cuda_fp16.h>
 #include <torch/extension.h>
 #include <type_traits>
@@ -19,8 +21,98 @@ constexpr int PAGE = 16; // slots per page
 
 template <typename T>
 __global__ void cache_write_kernel(const __half *k, const __half *v,
-                                   const int64_t *slots, T *k_cache,
-                                   T *v_cache, float *k_scale, float *v_scale) {
+                                   const int64_t *slots, T *k_cache, T *v_cache,
+                                   float *k_scale, float *v_scale) {
+  int b = blockIdx.x;
+  int kv_head = blockIdx.y;
+  int lane = threadIdx.x;
+  int64_t slot = slots[b];
+
+  // we have to basically take these, and figure out where the 4 values that
+  // this thread is supposed to operate on start from.
+  T *k_mem = k_cache + (slot * 1024) + (kv_head * 128) + (lane * 4);
+  T *v_mem = v_cache + (slot * 1024) + (kv_head * 128) + (lane * 4);
+
+  // we also have to know which of the 1024 values of the K/V we need to pick
+  const __half *k_put = k + (b * 1024) + (kv_head * 128) + (lane * 4);
+  const __half *v_put = v + (b * 1024) + (kv_head * 128) + (lane * 4);
+
+  float *k_scale_ptr = k_scale + (slot * 8) + kv_head;
+  float *v_scale_ptr = v_scale + (slot * 8) + kv_head;
+
+  float maxValK = 0.0f;
+  float maxValV = 0.0f;
+  float k_scale_val = 0.0f;
+  float v_scale_val = 0.0f;
+
+  // so, each thread handles 4 of the 1024 values of a K/V. This is gotten by
+  // k_mem, and the 3 after it, and the same for v_mem, and the 3 after it
+  for (int i = 0; i < 4; i++) {
+    T *k_add = k_mem + i;
+    T *v_add = v_mem + i;
+
+    // now, we have to figure out which of the 1024 values of k/v we're going to
+    // put in these 4 places.
+    const __half *k_val = k_put + i;
+    const __half *v_val = v_put + i;
+
+    if constexpr (std::is_same_v<T, __half>) {
+      *k_add = *k_val;
+      *v_add = *v_val;
+    }
+  }
+
+  for (int i = 0; i < 4; i++) {
+    const __half *k_val = k_put + i;
+    const __half *v_val = v_put + i;
+    if constexpr (std::is_same_v<T, int8_t>) {
+      maxValK = fmaxf(maxValK, fabsf(__half2float(*k_val)));
+      maxValV = fmaxf(maxValV, fabsf(__half2float(*v_val)));
+    }
+  }
+
+  if constexpr (std::is_same_v<T, int8_t>) {
+    int shuffles[] = {16, 8, 4, 2, 1};
+    for (int i = 0; i < 5; i++) {
+      int shuffleDist = shuffles[i];
+      float shuffleMaxK = __shfl_xor_sync(0xffffffff, maxValK, shuffleDist);
+      float shuffleMaxV = __shfl_xor_sync(0xffffffff, maxValV, shuffleDist);
+
+      maxValK = fmaxf(maxValK, shuffleMaxK);
+      maxValV = fmaxf(maxValV, shuffleMaxV);
+    }
+
+    if (maxValK == 0)
+      k_scale_val = 1.0f;
+    else
+      k_scale_val = maxValK / 127;
+
+    if (maxValV == 0)
+      v_scale_val = 1.0f;
+    else
+      v_scale_val = maxValV / 127;
+
+    for (int i = 0; i < 4; i++) {
+      const __half *k_val = k_put + i;
+      const __half *v_val = v_put + i;
+      T *k_add = k_mem + i;
+      T *v_add = v_mem + i;
+
+      int k_q = __float2int_rn(__half2float(*k_val) / k_scale_val);
+      int v_q = __float2int_rn(__half2float(*v_val) / v_scale_val);
+
+      k_q = min(max(k_q, -127), 127);
+      v_q = min(max(v_q, -127), 127);
+
+      *k_add = k_q;
+      *v_add = v_q;
+    }
+
+    if (lane == 0) {
+      *k_scale_ptr = k_scale_val;
+      *v_scale_ptr = v_scale_val;
+    }
+  }
 }
 
 void cache_write(torch::Tensor k, torch::Tensor v, torch::Tensor slots,
@@ -72,16 +164,16 @@ void cache_write(torch::Tensor k, torch::Tensor v, torch::Tensor slots,
   auto v_ptr = reinterpret_cast<const __half *>(v.data_ptr<at::Half>());
   auto slots_ptr = slots.data_ptr<int64_t>();
   if (int8) {
-    cache_write_kernel<int8_t><<<grid, 32>>>(
-        k_ptr, v_ptr, slots_ptr, k_cache.data_ptr<int8_t>(),
-        v_cache.data_ptr<int8_t>(), k_scale->data_ptr<float>(),
-        v_scale->data_ptr<float>());
+    cache_write_kernel<int8_t>
+        <<<grid, 32>>>(k_ptr, v_ptr, slots_ptr, k_cache.data_ptr<int8_t>(),
+                       v_cache.data_ptr<int8_t>(), k_scale->data_ptr<float>(),
+                       v_scale->data_ptr<float>());
   } else {
-    cache_write_kernel<__half><<<grid, 32>>>(
-        k_ptr, v_ptr, slots_ptr,
-        reinterpret_cast<__half *>(k_cache.data_ptr<at::Half>()),
-        reinterpret_cast<__half *>(v_cache.data_ptr<at::Half>()), nullptr,
-        nullptr);
+    cache_write_kernel<__half>
+        <<<grid, 32>>>(k_ptr, v_ptr, slots_ptr,
+                       reinterpret_cast<__half *>(k_cache.data_ptr<at::Half>()),
+                       reinterpret_cast<__half *>(v_cache.data_ptr<at::Half>()),
+                       nullptr, nullptr);
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
