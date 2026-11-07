@@ -53,3 +53,15 @@ def _merge(m: torch.Tensor, l: torch.Tensor, u: torch.Tensor) -> torch.Tensor:
     l_all = torch.einsum("bhc,bhc->bh", w, l)
     u_all = torch.einsum("bhc,bhcd->bhd", w, u)
     return (u_all / l_all.unsqueeze(-1)).half()
+
+
+def select_chunks(max_history: int) -> int:
+    """Hand-set chunk count for decode(), from the November 7 RTX 3090 grid.
+
+    128 chunks was within 4% of the best chunk count in all 24 measured cases
+    (batch size 1, 4, 16; history 4K, 16K; FP16 and INT8). The cap keeps at
+    least 16 tokens per chunk. 1 chunk means Path A. The caller passes the
+    longest history in the batch, known on the host, so choosing never waits
+    on the GPU.
+    """
+    return max(1, min(128, max_history // 16))

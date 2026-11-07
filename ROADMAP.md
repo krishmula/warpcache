@@ -103,14 +103,14 @@ finishes Path A and Path B is dropped.
   - [x] Absmax of the 128 values with `__shfl_xor_sync`. Scale = absmax / 127, or 1.0 when absmax is 0. Lane 0 stores the scale.
   - [x] Quantize with `__float2int_rn`, clamp to [-127, 127], and store INT8. The FP16 cache stores the values as they are, with no scale.
   - [x] Check: an exact INT8 and scale match against `PagedKVCache.write` on shuffled pages, a partial last page, an all-zero row, and values near the FP16 maximum. The tests are in `tests/test_cache_write.py`, ported from `test_quant_zero_vector`, `test_quant_extreme_finite`, `test_gather_shuffled_pages_and_partial_tail` and `test_append_across_page_boundary_matches_bulk_write` in `tests/test_reference.py`. `compute-sanitizer` reports 0 errors.
-- [ ] **Timing** with CUDA events on the 3090 only.
-  - [ ] Benchmark script. Working sets larger than 12 MiB so repeats do not read a warm L2. 10 warmup calls, 50 timed calls, median and spread. One result line per case, with the git commit and the host manifest.
-  - [ ] SDPA baseline on a gathered FP16 history.
-  - [ ] Run Path A, Path B and SDPA, FP16 and INT8, at batch size 1, 4 and 16 and history length 4K and 16K. Sweep the chunk count for Path B.
-  - [ ] Time `cache_write` for one new token per request at the same batch sizes.
-  - [ ] Check: the same case run twice gives medians within 3%. Achieved bandwidth stays below the 3090's 936 GB/s peak.
-- [ ] **`ncu`** on 2 to 4 cases, for example Path A and Path B at batch size 1 and 16K history. Record DRAM throughput as a percentage of peak, achieved occupancy and registers per thread. Check: one sentence per case that explains the number.
-- [ ] **Selector rule** from the measurements, for example "use Path B when batch size times query heads is below the SM count". Label it as hand-set. Check: on the measured cases, it is never more than 10% slower than the best chunk count.
+- [x] **Timing** with CUDA events on the 3090 only. Ran November 7 with `scripts/bench.py`. Decode and SDPA results are in `results/bench/ubuntu-20261107-012514.jsonl`, and `cache_write` results are in `ubuntu-20261107-013340.jsonl`.
+  - [x] Benchmark script. Working sets larger than 12 MiB so repeats do not read a warm L2. 10 warmup calls, 50 timed calls, median and spread. One result line per case, with the git commit and the host manifest.
+  - [x] SDPA baseline on a gathered FP16 history.
+  - [x] Run Path A, Path B and SDPA, FP16 and INT8, at batch size 1, 4 and 16 and history length 4K and 16K. Sweep the chunk count for Path B. Chunk counts 2 to 256, plus `path_b_kernel`, which times the Path B kernel without the merge.
+  - [x] Time `cache_write` for one new token per request at the same batch sizes. Each event pair times 100 calls, because one call takes about 2 us and the event timer steps by about 1 us.
+  - [ ] Check: the same case run twice gives medians within 3%. Achieved bandwidth stays below the 3090's 936 GB/s peak. Result: all 216 decode and SDPA cases repeat within 2.5%, and the fastest case reaches 869 GB/s. `cache_write` repeats within 1% in 10 of 12 cases, but FP16 at batch size 16 differs by 3.9% and 4.7% (about 90 ns of a 1.95 us median). Open: accept this as a known exception, or lock the GPU clocks and rerun.
+- [x] **`ncu`** on 2 to 4 cases, for example Path A and Path B at batch size 1 and 16K history. Record DRAM throughput as a percentage of peak, achieved occupancy and registers per thread. Check: one sentence per case that explains the number. Done November 7 for Path A at batch size 1, Path B at batch size 1 (64 chunks) and 16 (128 chunks), and SDPA at batch size 16, all at 16K history. Reports are in `results/ncu/`.
+- [x] **Selector rule** from the measurements, for example "use Path B when batch size times query heads is below the SM count". Label it as hand-set. Check: on the measured cases, it is never more than 10% slower than the best chunk count. Result: `select_chunks` in `kernels/decode.py`, hand-set, uses 128 chunks, capped at 16 tokens per chunk. It is within 3.8% of the best chunk count in all 24 cases, in both grid runs. Path A never won a measured case. The rule comes from the same data it is checked on.
 - [ ] **Figures and the paper.**
   - [ ] Figure script that reads the benchmark result lines.
   - [ ] Figures: latency against history length and batch size for Path A, Path B and SDPA, INT8 against FP16, the chunk-count sweep, and the cost of `cache_write`.
