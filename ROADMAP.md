@@ -108,14 +108,14 @@ finishes Path A and Path B is dropped.
   - [x] SDPA baseline on a gathered FP16 history.
   - [x] Run Path A, Path B and SDPA, FP16 and INT8, at batch size 1, 4 and 16 and history length 4K and 16K. Sweep the chunk count for Path B. Chunk counts 2 to 256, plus `path_b_kernel`, which times the Path B kernel without the merge.
   - [x] Time `cache_write` for one new token per request at the same batch sizes. Each event pair times 100 calls, because one call takes about 2 us and the event timer steps by about 1 us.
-  - [x] Check: the same case run twice gives medians within 3%. Achieved bandwidth stays below the 3090's 936 GB/s peak. Result: all 216 decode and SDPA cases repeat within 2.5%, and the fastest case reaches 869 GB/s. `cache_write` repeats within 1% in 10 of 12 cases, but FP16 at batch size 16 differs by 3.9% and 4.7% (about 90 ns of a 1.95 us median). Accepted November 7 as a known exception. The paper reports `cache_write` as repeating within 5%.
+  - [x] Check: the same case run twice gives medians within 3%. Achieved bandwidth stays below the 3090's 936 GB/s peak. Result: all 210 decode, Path B kernel-only and SDPA cases repeat within 2.6%, and the fastest case reaches 868 GB/s. `cache_write` repeats within 1% in 9 of 12 cases. INT8 at batch size 16 and 4K differs by 2.2%, and FP16 at batch size 16 by 3.9% and 4.6% (76 and 91 ns of a median near 1.9 us). Accepted November 7 as a known exception. The paper reports `cache_write` as repeating within 5%.
 - [x] **`ncu`** on 2 to 4 cases, for example Path A and Path B at batch size 1 and 16K history. Record DRAM throughput as a percentage of peak, achieved occupancy and registers per thread. Check: one sentence per case that explains the number. Done November 7 for Path A at batch size 1, Path B at batch size 1 (64 chunks) and 16 (128 chunks), and SDPA at batch size 16, all at 16K history. Reports are in `results/ncu/`.
 - [x] **Selector rule** from the measurements, for example "use Path B when batch size times query heads is below the SM count". Label it as hand-set. Check: on the measured cases, it is never more than 10% slower than the best chunk count. Result: `select_chunks` in `kernels/decode.py`, hand-set, uses 128 chunks, capped at 16 tokens per chunk. It is within 3.8% of the best chunk count in all 24 cases, in both grid runs. Path A never won a measured case. The rule comes from the same data it is checked on.
-- [ ] **Figures and the paper.**
+- [x] **Figures and the paper.** The paper is `docs/paper.md`.
   - [x] Figure script that reads the benchmark result lines. `scripts/figures.py` writes PDF and PNG files to `results/figures/`.
   - [x] Figures: latency against history length and batch size for Path A, Path B and SDPA, INT8 against FP16, the chunk-count sweep, and the cost of `cache_write`. Also `merge_fix`, which shows the old merge's floor of about 400 us.
-  - [ ] Paper sections 1 to 4 from the outline below. They do not need results.
-  - [ ] Paper sections 5 and 6 from the measurements and the `ncu` cases. Section 7 from the cut list.
+  - [x] Paper sections 1 to 4 from the outline below. They do not need results.
+  - [x] Paper sections 5 and 6 from the measurements and the `ncu` cases. Section 7 from the cut list.
 
 ### After day 3, before November 5
 
@@ -127,8 +127,8 @@ finishes Path A and Path B is dropped.
 - [ ] **Record the demo.**
   - [ ] Tests passing, one benchmark run, one figure, and one Nsight screenshot.
 - [ ] **Final paper pass.**
-  - [ ] Every number in the paper matches a result line or an `ncu` report.
-  - [ ] The selector is labelled hand-set. The cut list and SmoothAttention (Lin et al., 2024) are cited.
+  - [x] Every number in the paper matches a result line or an `ncu` report. Audited November 6 with a script against `results/bench`, `results/ncu/summary.md` and the manifest. Repeat this pass after any change to the paper.
+  - [x] The selector is labelled hand-set. The cut list and SmoothAttention (Lin et al., 2024) are cited.
 
 November 6 to 9 is buffer. Submission fixes only.
 
