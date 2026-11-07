@@ -18,33 +18,42 @@ def run(cmd: list[str]) -> str | None:
         return None
 
 
-manifest = {
-    "timestamp": datetime.now(timezone.utc).isoformat(),
-    "host": socket.gethostname(),
-    "python": sys.version,
-    "platform": platform.platform(),
-    "torch": torch.__version__,
-    "torch_cuda": torch.version.cuda,
-    "git_commit": run(["git", "rev-parse", "HEAD"]),
-    "git_dirty": bool(run(["git", "status", "--porcelain"])),
-    "nvcc": run(["nvcc", "--version"]),
-    "nvidia_smi": run(
-        ["nvidia-smi", "--query-gpu=name,memory.total,driver_version,clocks.max.sm,power.limit",
-         "--format=csv,noheader"]
-    ),
-}
-if torch.cuda.is_available():
-    props = torch.cuda.get_device_properties(0)
-    manifest["gpu"] = {
-        "name": props.name,
-        "capability": f"{props.major}.{props.minor}",
-        "sm_count": props.multi_processor_count,
-        "memory_bytes": props.total_memory,
-        "l2_bytes": getattr(props, "L2_cache_size", None),
-    }
 
-out = Path("results/env") / f"{manifest['host']}-{datetime.now():%Y%m%d-%H%M%S}.json"
-out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text(json.dumps(manifest, indent=2))
-print(json.dumps(manifest, indent=2))
-print(f"wrote {out}")
+def write_manifest() -> Path:
+    """Write the manifest to results/env and return its path."""
+    manifest = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "host": socket.gethostname(),
+        "python": sys.version,
+        "platform": platform.platform(),
+        "torch": torch.__version__,
+        "torch_cuda": torch.version.cuda,
+        "git_commit": run(["git", "rev-parse", "HEAD"]),
+        # Result files written under results/ do not make the code dirty.
+        "git_dirty": bool(run(["git", "status", "--porcelain", "--", ".", ":(exclude)results"])),
+        "nvcc": run(["nvcc", "--version"]),
+        "nvidia_smi": run(
+            ["nvidia-smi", "--query-gpu=name,memory.total,driver_version,clocks.max.sm,power.limit",
+             "--format=csv,noheader"]
+        ),
+    }
+    if torch.cuda.is_available():
+        props = torch.cuda.get_device_properties(0)
+        manifest["gpu"] = {
+            "name": props.name,
+            "capability": f"{props.major}.{props.minor}",
+            "sm_count": props.multi_processor_count,
+            "memory_bytes": props.total_memory,
+            "l2_bytes": getattr(props, "L2_cache_size", None),
+        }
+
+    out = Path("results/env") / f"{manifest['host']}-{datetime.now():%Y%m%d-%H%M%S}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(manifest, indent=2))
+    return out
+
+
+if __name__ == "__main__":
+    path = write_manifest()
+    print(path.read_text())
+    print(f"wrote {path}")
