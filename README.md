@@ -29,19 +29,21 @@ warpcache makes those tradeoffs explicit:
 
 ## Status
 
-**Research prototype.** Both CUDA paths are implemented. Performance measurements
-and the workload selector are still pending; this repository does not yet claim
-a speedup over PyTorch or a serving engine.
+**Research prototype.** Both CUDA paths and the `cache_write` kernel are
+implemented and measured on one RTX 3090. PyTorch SDPA (FlashAttention) is
+faster than both paths in every measured case. This repository does not claim a
+speedup over PyTorch or a serving engine. See [docs/paper.md](docs/paper.md) for
+the results.
 
 | Component | Current state |
 | --- | --- |
 | PyTorch reference | Quantization, paged cache writes, decode attention, and partial-state merge |
 | CUDA Path A | FP16 and INT8 decode over the whole history |
 | CUDA Path B | FP16 and INT8 decode over multiple chunks, with a PyTorch merge |
+| CUDA cache write | FP16 and INT8, an exact match with the PyTorch reference |
 | GPU validation | Correctness and Compute Sanitizer runs recorded in the [roadmap](ROADMAP.md) |
-| CUDA cache write | Planned; cache writes currently use the PyTorch reference |
-| Benchmarks and profiling | Planned, with PyTorch SDPA on a gathered FP16 history as the baseline |
-| Workload selector | Planned after measurements; chunk count is currently chosen by the caller |
+| Benchmarks and profiling | `scripts/bench.py`, `scripts/ncu_case.py`, results in [results/](results/), figures from `scripts/figures.py` |
+| Workload selector | Hand-set: `select_chunks` in `kernels/decode.py` picks 128 chunks |
 
 ## Quick start
 
@@ -95,7 +97,7 @@ The extension compiles on the first call.
 
 The recorded RTX 3090 environment uses Ubuntu 22.04, Python 3.12,
 PyTorch 2.14.1+cu130, CUDA 13.0, and driver 580.95.05. See the
-[environment manifest](results/env/ubuntu-20261104-233543.json) for details.
+[environment manifest](results/env/ubuntu-20261107-005603.json) for details.
 
 After running the CPU example, move its inputs to the GPU and choose a path:
 
@@ -119,13 +121,48 @@ cache, pass `None` for both scale arguments.
 Run the CUDA correctness tests with:
 
 ```sh
-uv run pytest tests/test_decode.py tests/test_warp_reduce.py
+uv run pytest tests/test_decode.py tests/test_cache_write.py tests/test_warp_reduce.py
 ```
 
 Before profiling on a new GPU host, run `bash scripts/gpu_smoke_test.sh`. It
 records the environment, compiles a small CUDA extension, and checks Nsight
 Compute counter access. This check also requires `ncu` on `PATH` and permission
 to read GPU performance counters; the recorded VM required running `ncu` as root.
+
+### Set up a fresh GPU host
+
+These steps set up the recorded Vast.ai Ubuntu 22.04 VM, logged in as root,
+with driver 580 or newer. Run each command on its own. Install the CUDA keyring
+outside the repository, so the environment manifest does not report a dirty
+worktree.
+
+```sh
+apt-get update && apt-get install -y git curl ninja-build build-essential
+cd /tmp && wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+dpkg -i /tmp/cuda-keyring_1.1-1_all.deb && apt-get update
+apt-get install -y cuda-toolkit-13-0
+export PATH=/usr/local/cuda/bin:$PATH
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+cd ~ && git clone https://github.com/krishmula/warpcache.git && cd warpcache
+uv sync
+bash scripts/gpu_smoke_test.sh
+uv run pytest -q
+```
+
+### Reproduce the measurements
+
+```sh
+uv run python scripts/bench.py                     # full grid, writes results/bench/<host>-<time>.jsonl
+uv run python scripts/bench.py --kernel path_a --dtype fp16 --batch 1 --history 16384
+uv run python scripts/bench.py --compare A.jsonl B.jsonl   # two runs within 3%?
+ncu --nvtx --nvtx-include "case/" --set full -o results/ncu/path_a_b1_h16k \
+    uv run python scripts/ncu_case.py --kernel path_a --batch 1 --history 16384
+uv run python scripts/figures.py                   # results/figures/*.pdf and *.png
+```
+
+The full grid takes a few minutes on the RTX 3090. The first call to each
+kernel compiles it, which takes about a minute.
 
 ## Design
 
@@ -190,11 +227,12 @@ not generation quality.
 | [Scope and tensor contract](docs/scope.md) | Supported inputs, operations, and claim boundaries |
 | [Roadmap](ROADMAP.md) | Implementation status, validation records, and experiment plan |
 | [Learning roadmap](docs/learning-roadmap.md) | CUDA concepts and exercises; its original schedule is superseded by the roadmap |
-| [kernels/](kernels/) | CUDA decode and warp-reduction kernels, with Python wrappers |
+| [Paper](docs/paper.md) | Design, measurements, profiling, and limitations |
+| [kernels/](kernels/) | CUDA decode, cache write, and warp-reduction kernels, with Python wrappers |
 | [reference/](reference/) | PyTorch quantization, paged cache, attention, and merge |
 | [tests/](tests/) | CPU reference and CUDA correctness tests |
-| [scripts/](scripts/) | GPU environment checks and real-model quantization measurements |
-| [results/](results/) | Environment manifests and GPU usage log |
+| [scripts/](scripts/) | GPU environment checks, benchmark, `ncu` runner, figures, and real-model quantization measurements |
+| [results/](results/) | Benchmark result lines, `ncu` summary, figures, environment manifests, and GPU usage log |
 
 ## Feedback and contributions
 

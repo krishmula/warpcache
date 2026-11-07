@@ -2,8 +2,8 @@
 
 RTX 3090 on Vast.ai, manifest `results/env/ubuntu-20261107-005603.json`, commit
 `825f57d`. Each report profiles one call from `scripts/ncu_case.py` with
-`--set full`. `ncu` locks the SM clock at 1.39 GHz, so durations run about 25 to
-35% longer than the boost-clock times from `scripts/bench.py`. The `.ncu-rep`
+`--set full`. `ncu` locks the SM clock at 1.39 GHz, so durations run about 15 to
+28% longer than the boost-clock times from `scripts/bench.py`. The `.ncu-rep`
 files are not in git (`*.ncu-rep` is ignored). The numbers below are copied from
 `ncu --import <report> --page details --section SpeedOfLight --section Occupancy
 --section LaunchStats`.
