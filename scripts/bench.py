@@ -49,8 +49,8 @@ SLEEP_CYCLES = 50_000_000  # about 30 ms at 3090 clocks, longer than queueing 50
 # cache_write takes 3 to 4 us, and CUDA events tick in steps of about 1 us. So each
 # event pair times CACHE_WRITE_INNER calls, after a short sleep that lets the CPU
 # queue them all before the GPU starts.
-CACHE_WRITE_INNER = 20
-PAIR_SLEEP_CYCLES = 2_000_000
+CACHE_WRITE_INNER = 100
+PAIR_SLEEP_CYCLES = 6_000_000  # about 3.5 ms, longer than queueing 100 calls at 13 us each
 REPEAT_TOLERANCE = 0.03
 MAX_REL_ERROR = 1e-2
 
