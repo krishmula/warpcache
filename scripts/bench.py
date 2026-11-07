@@ -49,7 +49,8 @@ SLEEP_CYCLES = 50_000_000  # about 30 ms at 3090 clocks, longer than queueing 50
 REPEAT_TOLERANCE = 0.03
 MAX_REL_ERROR = 1e-2
 
-KERNELS = ["path_a", "path_b", "sdpa", "cache_write"]
+# path_b_kernel times the Path B kernel alone, without the PyTorch merge.
+KERNELS = ["path_a", "path_b", "path_b_kernel", "sdpa", "cache_write"]
 DTYPES = {"fp16": torch.float16, "int8": torch.int8}
 BATCHES = [1, 4, 16]
 HISTORIES = [4096, 16384]
@@ -186,7 +187,7 @@ def check_close(got: torch.Tensor, want: torch.Tensor, what: str) -> float:
 # Cases
 
 
-def decode_cases(inp: Inputs, args, decode):
+def decode_cases(inp: Inputs, args, decode, ext):
     for dtype in args.dtype if {"path_a", "path_b"} & set(args.kernel) else []:
         want = sdpa(inp.q[0], *inp.gathered(dtype, 0))
         if "path_a" in args.kernel:
@@ -196,6 +197,14 @@ def decode_cases(inp: Inputs, args, decode):
                 if inp.history // c >= PAGE:
                     yield _decode_case(inp, dtype, c, want, decode)
         del want
+    if "path_b_kernel" in args.kernel:
+        for dtype in args.dtype:
+            for c in args.chunks:
+                if inp.history // c >= PAGE:
+                    calls = [lambda i=i: ext.decode(*inp.decode_args(dtype, i), c) for i in range(inp.copies)]
+                    yield {"kernel": "path_b_kernel", "dtype": dtype, "chunks": c,
+                           "bytes": inp.batch * inp.history * bytes_per_token(dtype),
+                           "copies": inp.copies, **time_calls(calls)}
     if "sdpa" in args.kernel and "fp16" in args.dtype:
         kv = [inp.gathered("fp16", i) for i in range(inp.copies)]
         calls = [lambda i=i: sdpa(inp.q[i], *kv[i]) for i in range(inp.copies)]
@@ -275,7 +284,7 @@ def main(argv=None) -> int:
     from env_manifest import write_manifest
 
     from kernels.cache_write import cache_write
-    from kernels.decode import decode
+    from kernels.decode import _ext, decode
 
     manifest_path = write_manifest()
     manifest = json.loads(manifest_path.read_text())
@@ -300,8 +309,8 @@ def main(argv=None) -> int:
                 smallest = batch * history * min(bytes_per_token(d) for d in args.dtype)
                 inp = Inputs(batch, history, smallest)
                 cases = []
-                if set(args.kernel) & {"path_a", "path_b", "sdpa"}:
-                    cases.append(decode_cases(inp, args, decode))
+                if set(args.kernel) & {"path_a", "path_b", "path_b_kernel", "sdpa"}:
+                    cases.append(decode_cases(inp, args, decode, _ext()))
                 if "cache_write" in args.kernel:
                     cases.append(cache_write_cases(inp, args, cache_write))
                 for gen in cases:
