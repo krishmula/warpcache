@@ -46,6 +46,11 @@ PEAK_GBPS = 936.0
 MIN_WORKING_SET = 24 * 2**20
 WARMUP, ITERS = 10, 50
 SLEEP_CYCLES = 50_000_000  # about 30 ms at 3090 clocks, longer than queueing 50 calls
+# cache_write takes 3 to 4 us, and CUDA events tick in steps of about 1 us. So each
+# event pair times CACHE_WRITE_INNER calls, after a short sleep that lets the CPU
+# queue them all before the GPU starts.
+CACHE_WRITE_INNER = 20
+PAIR_SLEEP_CYCLES = 2_000_000
 REPEAT_TOLERANCE = 0.03
 MAX_REL_ERROR = 1e-2
 
@@ -141,8 +146,11 @@ def sdpa(q, k, v):
 # Timing
 
 
-def time_calls(calls: list) -> dict:
-    """GPU time per call with CUDA events, plus wall time per call, in microseconds."""
+def time_calls(calls: list, inner: int = 1) -> dict:
+    """GPU time per call with CUDA events, plus wall time per call, in microseconds.
+
+    Each event pair brackets `inner` back-to-back calls.
+    """
     n = len(calls)
     for i in range(WARMUP):
         calls[i % n]()
@@ -152,17 +160,20 @@ def time_calls(calls: list) -> dict:
     ends = [torch.cuda.Event(enable_timing=True) for _ in range(ITERS)]
     torch.cuda._sleep(SLEEP_CYCLES)
     for i in range(ITERS):
+        if inner > 1:
+            torch.cuda._sleep(PAIR_SLEEP_CYCLES)
         starts[i].record()
-        calls[i % n]()
+        for j in range(inner):
+            calls[(i * inner + j) % n]()
         ends[i].record()
     torch.cuda.synchronize()
-    us = sorted(s.elapsed_time(e) * 1e3 for s, e in zip(starts, ends))
+    us = sorted(s.elapsed_time(e) * 1e3 / inner for s, e in zip(starts, ends))
 
     t0 = time.perf_counter()
-    for i in range(ITERS):
+    for i in range(ITERS * inner):
         calls[i % n]()
     torch.cuda.synchronize()
-    wall = (time.perf_counter() - t0) / ITERS * 1e6
+    wall = (time.perf_counter() - t0) / (ITERS * inner) * 1e6
 
     median = statistics.median(us)
     p10, p90 = us[ITERS // 10], us[ITERS - 1 - ITERS // 10]
@@ -174,6 +185,7 @@ def time_calls(calls: list) -> dict:
         "max_us": us[-1],
         "spread_pct": 100 * (p90 - p10) / median,
         "wall_us": wall,
+        "inner": inner,
     }
 
 
@@ -242,7 +254,8 @@ def cache_write_cases(inp: Inputs, args, cache_write):
             calls.append(lambda s=slots, nk=nk, nv=nv: cache_write(nk, nv, s, k, v, ks, vs))
         row = HKV * D * (2 if dtype == "fp16" else 1) + (HKV * 4 if dtype == "int8" else 0)
         yield {"kernel": "cache_write", "dtype": dtype, "chunks": None,
-               "bytes": batch * 2 * (HKV * D * 2 + row), "copies": inp.copies, **time_calls(calls)}
+               "bytes": batch * 2 * (HKV * D * 2 + row), "copies": inp.copies,
+               **time_calls(calls, inner=CACHE_WRITE_INNER)}
 
 
 # Main
