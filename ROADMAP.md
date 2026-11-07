@@ -112,8 +112,8 @@ finishes Path A and Path B is dropped.
 - [x] **`ncu`** on 2 to 4 cases, for example Path A and Path B at batch size 1 and 16K history. Record DRAM throughput as a percentage of peak, achieved occupancy and registers per thread. Check: one sentence per case that explains the number. Done November 7 for Path A at batch size 1, Path B at batch size 1 (64 chunks) and 16 (128 chunks), and SDPA at batch size 16, all at 16K history. Reports are in `results/ncu/`.
 - [x] **Selector rule** from the measurements, for example "use Path B when batch size times query heads is below the SM count". Label it as hand-set. Check: on the measured cases, it is never more than 10% slower than the best chunk count. Result: `select_chunks` in `kernels/decode.py`, hand-set, uses 128 chunks, capped at 16 tokens per chunk. It is within 3.8% of the best chunk count in all 24 cases, in both grid runs. Path A never won a measured case. The rule comes from the same data it is checked on.
 - [ ] **Figures and the paper.**
-  - [ ] Figure script that reads the benchmark result lines.
-  - [ ] Figures: latency against history length and batch size for Path A, Path B and SDPA, INT8 against FP16, the chunk-count sweep, and the cost of `cache_write`.
+  - [x] Figure script that reads the benchmark result lines. `scripts/figures.py` writes PDF and PNG files to `results/figures/`.
+  - [x] Figures: latency against history length and batch size for Path A, Path B and SDPA, INT8 against FP16, the chunk-count sweep, and the cost of `cache_write`. Also `merge_fix`, which shows the old merge's floor of about 400 us.
   - [ ] Paper sections 1 to 4 from the outline below. They do not need results.
   - [ ] Paper sections 5 and 6 from the measurements and the `ncu` cases. Section 7 from the cut list.
 

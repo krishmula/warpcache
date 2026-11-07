@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 dependencies = ["numpy", "torch>=2.5"]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "matplotlib>=3.11"]
 capture = ["transformers>=4.56", "accelerate"]
 
 [tool.pytest.ini_options]
